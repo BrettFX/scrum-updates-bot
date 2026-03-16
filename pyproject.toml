@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scrum-updates-bot"
+version = "0.1.0"
+description = "Desktop chatbot for generating YTB scrum updates with local LLMs"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "Brian Allen" }
+]
+dependencies = [
+  "httpx>=0.27,<1",
+  "pydantic>=2.8,<3",
+  "PySide6>=6.8,<7"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<9"
+]
+build = [
+  "pyinstaller>=6.11,<7"
+]
+
+[project.scripts]
+scrum-updates-bot = "scrum_updates_bot.main:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

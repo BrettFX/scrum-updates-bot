@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if ! command -v ollama >/dev/null 2>&1; then
+  cat <<'EOF'
+Scrum Updates Bot installed successfully.
+
+Ollama was not found on this system.
+Install and start Ollama before generating YTB updates:
+
+  curl -fsSL https://ollama.com/install.sh | sh
+  ollama serve
+  ollama pull llama3.2:3b
+
+You can still launch the application and configure the model later.
+EOF
+fi

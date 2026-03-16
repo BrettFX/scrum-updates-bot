@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Scrum Updates Bot
+Comment=Generate YTB scrum updates with a local LLM
+Exec=/usr/bin/scrum-updates-bot
+Terminal=false
+Categories=Office;Utility;
+StartupNotify=true
