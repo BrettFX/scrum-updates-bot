@@ -226,6 +226,16 @@ For iterative development from Linux, `./scripts/build_remote_packages.sh` can d
 
 To publish a release, push a tag such as `v0.1.0` to GitHub.
 
+Example:
+
+```bash
+git push origin master
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+That tag push runs the same packaging workflow and then publishes the artifacts as a GitHub Release.
+
 See [docs/PACKAGING.md](docs/PACKAGING.md) for the distro support strategy and installer rationale.
 
 ## Future enhancements

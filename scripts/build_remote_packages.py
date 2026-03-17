@@ -10,11 +10,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 
 API_BASE = "https://api.github.com"
 WORKFLOW_FILE = "release-packages.yml"
+
+
+class NoRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
 
 
 def run_git_command(args: list[str], root: Path) -> str:
@@ -153,12 +158,28 @@ def download_artifacts(owner: str, repo: str, run_id: int, token: str, output_di
         archive_url = artifact["archive_download_url"]
         name = artifact["name"]
         destination = output_dir / f"{name}.zip"
+
         request = Request(archive_url, method="GET")
         request.add_header("Accept", "application/vnd.github+json")
         request.add_header("Authorization", f"Bearer {token}")
         request.add_header("X-GitHub-Api-Version", "2022-11-28")
-        with urlopen(request, timeout=120) as response_handle:
-            destination.write_bytes(response_handle.read())
+        request.add_header("User-Agent", "scrum-updates-bot-remote-builder")
+
+        redirect_opener = build_opener(NoRedirectHandler)
+        try:
+            with redirect_opener.open(request, timeout=120) as response_handle:
+                destination.write_bytes(response_handle.read())
+        except HTTPError as exc:
+            if exc.code not in {301, 302, 303, 307, 308}:
+                raise
+            signed_url = exc.headers.get("Location")
+            if not signed_url:
+                raise RuntimeError(f"Artifact download redirect for '{name}' did not include a Location header.")
+
+            signed_request = Request(signed_url, method="GET")
+            signed_request.add_header("User-Agent", "scrum-updates-bot-remote-builder")
+            with urlopen(signed_request, timeout=120) as response_handle:
+                destination.write_bytes(response_handle.read())
         downloaded.append(destination)
     return downloaded
 
