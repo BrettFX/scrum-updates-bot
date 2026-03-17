@@ -1,14 +1,13 @@
 from __future__ import annotations
 
+import ctypes
 import logging
+import os
 import sys
 import traceback
 from pathlib import Path
 
-from PySide6.QtWidgets import QApplication, QMessageBox
-
 from scrum_updates_bot.storage.settings import get_app_data_dir
-from scrum_updates_bot.ui.main_window import MainWindow
 
 
 def _get_startup_log_path() -> Path:
@@ -31,16 +30,11 @@ def _configure_logging() -> Path:
 
 
 def _show_fatal_error(message: str) -> None:
-    app = QApplication.instance()
-    owns_app = False
-    if app is None:
-        app = QApplication([])
-        owns_app = True
+    if os.name == "nt":
+        ctypes.windll.user32.MessageBoxW(0, message, "Scrum Updates Bot failed to start", 0x10)
+        return
 
-    QMessageBox.critical(None, "Scrum Updates Bot failed to start", message)
-
-    if owns_app:
-        app.quit()
+    print(message, file=sys.stderr)
 
 
 def main() -> int:
@@ -48,6 +42,10 @@ def main() -> int:
     logging.info("Application startup initiated")
 
     try:
+        from PySide6.QtWidgets import QApplication, QMessageBox
+
+        from scrum_updates_bot.ui.main_window import MainWindow
+
         app = QApplication([])
         app.setApplicationName("Scrum Updates Bot")
         app.setOrganizationName("Brian Allen")
@@ -59,10 +57,12 @@ def main() -> int:
 
             error_text = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
             logging.critical("Unhandled exception during app execution\n%s", error_text)
-            _show_fatal_error(
+            QMessageBox.critical(
+                None,
+                "Scrum Updates Bot failed to start",
                 "Scrum Updates Bot encountered a fatal error.\n\n"
                 f"Details were written to:\n{log_path}\n\n"
-                f"{exc_value}"
+                f"{exc_value}",
             )
 
         sys.excepthook = handle_exception
