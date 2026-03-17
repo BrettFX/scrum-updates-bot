@@ -1,7 +1,9 @@
 param(
     [switch]$SetupOnly,
     [switch]$BuildOnly,
-    [switch]$WithInstaller
+    [switch]$WithInstaller,
+    [switch]$InstallOllamaIfMissing,
+    [switch]$SkipOllamaCheck
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,6 +14,7 @@ $SpecFile = Join-Path $RootDir "scrum-updates-bot.spec"
 $InstallerScript = Join-Path $RootDir "packaging\windows\scrum-updates-bot.iss"
 $InnoCompiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
 $SupportedPythonMinors = @(12, 11)
+$OllamaInstallCommand = 'irm https://ollama.com/install.ps1 | iex'
 
 if ($SetupOnly -and $BuildOnly) {
     throw "Choose either -SetupOnly or -BuildOnly, not both."
@@ -111,6 +114,62 @@ Recommended options:
     & $PythonExe -m pip install -e ".[build]"
 }
 
+function Test-OllamaInstalled {
+    if (Get-Command ollama -ErrorAction SilentlyContinue) {
+        return $true
+    }
+
+    foreach ($candidate in @(
+        (Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama.exe'),
+        (Join-Path $env:LOCALAPPDATA 'Programs\Ollama\Ollama.exe'),
+        (Join-Path $env:ProgramFiles 'Ollama\ollama.exe'),
+        (Join-Path ${env:ProgramFiles(x86)} 'Ollama\ollama.exe')
+    )) {
+        if ($candidate -and (Test-Path $candidate)) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Install-Ollama {
+    Write-Host 'Installing Ollama...'
+    & powershell.exe -ExecutionPolicy Bypass -NoProfile -Command $OllamaInstallCommand
+    if ($LASTEXITCODE -ne 0) {
+        throw "Automatic Ollama installation failed. Run '$OllamaInstallCommand' manually in PowerShell."
+    }
+}
+
+function Ensure-Ollama {
+    if ($SkipOllamaCheck -or $BuildOnly -or $env:CI) {
+        return
+    }
+
+    if (Test-OllamaInstalled) {
+        Write-Host 'Ollama installation verified.'
+        return
+    }
+
+    Write-Warning 'Ollama was not found on this system.'
+
+    if ($InstallOllamaIfMissing) {
+        Install-Ollama
+        return
+    }
+
+    if ($Host.Name -match 'ConsoleHost|Visual Studio Code Host') {
+        $response = Read-Host "Install Ollama now? [Y/N]"
+        if ($response -match '^[Yy]') {
+            Install-Ollama
+            return
+        }
+    }
+
+    Write-Host "Install Ollama later with: $OllamaInstallCommand"
+    Write-Host 'Then start Ollama and pull a model such as llama3.2:3b.'
+}
+
 function Build-Executable {
     if (-not (Test-Path $PythonExe)) {
         throw "Missing virtual environment. Run .\scripts\install_windows.ps1 first."
@@ -148,6 +207,7 @@ $shouldBuild = -not $SetupOnly
 
 if ($shouldSetup) {
     Install-Dependencies
+    Ensure-Ollama
 }
 
 if ($shouldBuild) {

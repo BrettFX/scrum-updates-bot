@@ -50,6 +50,12 @@ Linux uses one script to set up the environment and build a runnable app bundle:
 
 That creates a repo-local `.venv`, installs the app, and builds the runnable binary at `dist/scrum-updates-bot/scrum-updates-bot`.
 
+If Ollama is missing, the Linux installer now verifies that and can install it for you:
+
+```bash
+./scripts/install_linux.sh --install-ollama
+```
+
 Windows also uses one script. Run it from a native Windows PowerShell session, not from WSL:
 
 ```powershell
@@ -57,6 +63,12 @@ Windows also uses one script. Run it from a native Windows PowerShell session, n
 ```
 
 That creates `.venv`, installs the app, and builds the runnable executable at `dist\scrum-updates-bot\scrum-updates-bot.exe`.
+
+If Ollama is missing, the Windows installer can verify that and install it for you:
+
+```powershell
+.\scripts\install_windows.ps1 -InstallOllamaIfMissing
+```
 
 For local Windows packaging, use Python 3.12 if possible. Python 3.13 builds have shown `PySide6.QtWidgets` DLL load failures in local packaging.
 
@@ -119,6 +131,11 @@ On Windows, run the built executable with:
 ```powershell
 .\dist\scrum-updates-bot\scrum-updates-bot.exe
 ```
+
+If the packaged app fails to open, check the startup log at:
+
+- Windows: `%APPDATA%\scrum-updates-bot\logs\startup.log`
+- Linux: `~/.local/share/scrum-updates-bot/logs/startup.log`
 
 If you want the editable development launcher on Windows instead, use:
 
@@ -211,6 +228,12 @@ To create a Windows installer, install Inno Setup 6 and run:
 ```
 
 This produces an installer `.exe` under `output\windows-installer`.
+
+The Windows GUI installer also checks for Ollama after installation and offers to run:
+
+```powershell
+irm https://ollama.com/install.ps1 | iex
+```
 
 ## GitHub Releases
 

@@ -35,6 +35,7 @@ from scrum_updates_bot.core.prompts import PRESET_GUIDANCE
 from scrum_updates_bot.core.rendering import render_report_html, render_report_markdown, render_report_text
 from scrum_updates_bot.services.generator import YTBGeneratorService
 from scrum_updates_bot.services.ollama import OllamaClient, OllamaError
+from scrum_updates_bot.services.ollama_setup import is_ollama_cli_installed, ollama_install_instructions
 from scrum_updates_bot.storage.drafts import DraftStore
 from scrum_updates_bot.storage.settings import SettingsStore
 from scrum_updates_bot.ui.workers import ReportWorker
@@ -52,6 +53,7 @@ class MainWindow(QMainWindow):
         self.current_worker: ReportWorker | None = None
         self.selected_preset = self.settings.selected_preset
         self._restoring_session = False
+        self._ollama_prompt_shown = False
         self.autosave_timer = QTimer(self)
         self.autosave_timer.setInterval(700)
         self.autosave_timer.setSingleShot(True)
@@ -368,6 +370,7 @@ class MainWindow(QMainWindow):
             self.selected_preset = self.settings.selected_preset
         self._rebuild_preset_menu()
         self.check_ollama_status()
+        self._show_ollama_setup_prompt_if_needed()
         self.refresh_models(silent=True)
         self.splitter.setSizes([self.settings.splitter_left_width, self.settings.splitter_right_width])
         restored = self._restore_session_state()
@@ -385,6 +388,22 @@ class MainWindow(QMainWindow):
             self.append_activity("Ollama is reachable.")
         else:
             self.append_activity("Ollama is not reachable. Start Ollama or update the configured base URL.")
+
+    def _show_ollama_setup_prompt_if_needed(self) -> None:
+        if self._ollama_prompt_shown or self.ollama_client.is_available():
+            return
+
+        self._ollama_prompt_shown = True
+        if is_ollama_cli_installed():
+            QMessageBox.information(
+                self,
+                "Start Ollama",
+                "Ollama appears to be installed but is not reachable.\n\n"
+                "Start the Ollama service, then click 'Check Ollama' or 'Refresh Models'.",
+            )
+            return
+
+        QMessageBox.warning(self, "Install Ollama", ollama_install_instructions())
 
     def refresh_models(self, silent: bool = False) -> None:
         try:

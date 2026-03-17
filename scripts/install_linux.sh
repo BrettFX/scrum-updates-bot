@@ -8,6 +8,8 @@ PACKAGE_NAME="scrum-updates-bot"
 SETUP_ONLY=false
 BUILD_ONLY=false
 BUILD_DEB=false
+INSTALL_OLLAMA=false
+SKIP_OLLAMA_CHECK=false
 
 for arg in "$@"; do
   case "$arg" in
@@ -20,9 +22,15 @@ for arg in "$@"; do
     --deb)
       BUILD_DEB=true
       ;;
+    --install-ollama)
+      INSTALL_OLLAMA=true
+      ;;
+    --skip-ollama-check)
+      SKIP_OLLAMA_CHECK=true
+      ;;
     *)
       echo "Unknown argument: $arg" >&2
-      echo "Usage: $0 [--setup-only | --build-only | --deb]" >&2
+      echo "Usage: $0 [--setup-only | --build-only | --deb | --install-ollama | --skip-ollama-check]" >&2
       exit 1
       ;;
   esac
@@ -50,6 +58,61 @@ setup_environment() {
 
   "$VENV_DIR/bin/python" -m pip install --upgrade pip
   "$VENV_DIR/bin/python" -m pip install -e "$ROOT_DIR[build]"
+}
+
+install_ollama() {
+  if command -v ollama >/dev/null 2>&1; then
+    echo "Ollama is already installed."
+    return
+  fi
+
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "curl is required to install Ollama automatically on Linux." >&2
+    echo "Install curl and then run: curl -fsSL https://ollama.com/install.sh | sh" >&2
+    exit 1
+  fi
+
+  echo "Installing Ollama..."
+  bash -lc 'curl -fsSL https://ollama.com/install.sh | sh'
+
+  if ! command -v ollama >/dev/null 2>&1; then
+    echo "Ollama installation finished but the 'ollama' command is still not available on PATH." >&2
+    echo "You may need to open a new shell session before running it." >&2
+  fi
+}
+
+ensure_ollama() {
+  if [[ "$SKIP_OLLAMA_CHECK" == true || "$BUILD_ONLY" == true || "$BUILD_DEB" == true || -n "${CI:-}" ]]; then
+    return
+  fi
+
+  if command -v ollama >/dev/null 2>&1; then
+    echo "Ollama installation verified."
+    return
+  fi
+
+  echo "Ollama was not found on this system."
+
+  if [[ "$INSTALL_OLLAMA" == true ]]; then
+    install_ollama
+    return
+  fi
+
+  if [[ -t 0 ]]; then
+    read -r -p "Install Ollama now? [y/N] " reply
+    if [[ "$reply" =~ ^[Yy]$ ]]; then
+      install_ollama
+      return
+    fi
+  fi
+
+  cat <<'EOF'
+Install Ollama later with:
+
+  curl -fsSL https://ollama.com/install.sh | sh
+  ollama serve
+  ollama pull llama3.2:3b
+EOF
 }
 
 build_bundle() {
@@ -121,6 +184,7 @@ EOF
 
 if [[ "$BUILD_ONLY" != true ]]; then
   setup_environment
+  ensure_ollama
 fi
 
 if [[ "$SETUP_ONLY" != true ]]; then
