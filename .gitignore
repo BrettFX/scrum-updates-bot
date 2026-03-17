@@ -9,3 +9,4 @@ build/
 dist/
 output/
 *.spec
+!scrum-updates-bot.spec
