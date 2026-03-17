@@ -29,9 +29,27 @@ jobs:
         shell: powershell
         run: choco install innosetup --no-progress -y
 
+      - name: Prepare Windows CI log directory
+        shell: powershell
+        run: New-Item -ItemType Directory -Force -Path output\ci-logs | Out-Null
+
+      - name: Create Windows virtual environment
+        shell: powershell
+        run: py -3.12 -m venv .venv 2>&1 | Tee-Object -FilePath output\ci-logs\01-create-venv.log
+
+      - name: Install Windows build dependencies
+        shell: powershell
+        run: |
+          .\.venv\Scripts\python.exe -m pip install --upgrade pip 2>&1 | Tee-Object -FilePath output\ci-logs\02-pip-upgrade.log
+          .\.venv\Scripts\python.exe -m pip install -e ".[build]" 2>&1 | Tee-Object -FilePath output\ci-logs\03-pip-install.log
+
       - name: Build Windows executable
         shell: powershell
-        run: .\scripts\install_windows.ps1
+        run: |
+          .\.venv\Scripts\python.exe -m PyInstaller --noconfirm --clean scrum-updates-bot.spec 2>&1 | Tee-Object -FilePath output\ci-logs\04-pyinstaller.log
+          if (-not (Test-Path 'dist\scrum-updates-bot\scrum-updates-bot.exe')) {
+            throw 'PyInstaller completed without producing dist\\scrum-updates-bot\\scrum-updates-bot.exe'
+          }
 
       - name: Show Windows build output
         if: always()
@@ -57,7 +75,8 @@ jobs:
 
       - name: Build Windows installer
         shell: powershell
-        run: .\scripts\install_windows.ps1 -BuildOnly -WithInstaller
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" packaging\windows\scrum-updates-bot.iss 2>&1 | Tee-Object -FilePath output\ci-logs\05-inno-setup.log
 
       - name: Archive Windows portable bundle
         shell: powershell
@@ -71,6 +90,7 @@ jobs:
         with:
           name: windows-debug-artifacts
           path: |
+            output/ci-logs/**
             build/**
             dist/**
             output/windows-installer/**
