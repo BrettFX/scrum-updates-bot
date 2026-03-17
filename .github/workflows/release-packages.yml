@@ -1,0 +1,108 @@
+name: Release Packages
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Inno Setup
+        shell: powershell
+        run: choco install innosetup --no-progress -y
+
+      - name: Build Windows executable and installer
+        shell: powershell
+        run: .\scripts\install_windows.ps1 -WithInstaller
+
+      - name: Archive Windows portable bundle
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path output\windows-portable | Out-Null
+          Compress-Archive -Path dist\scrum-updates-bot\* -DestinationPath output\windows-portable\scrum-updates-bot-windows-portable.zip -Force
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-packages
+          path: |
+            output/windows-installer/*.exe
+            output/windows-portable/*.zip
+
+  build-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Linux packaging dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev
+          chmod +x scripts/*.sh
+
+      - name: Build Linux bundle and Debian package
+        run: ./scripts/install_linux.sh --deb
+
+      - name: Archive Linux portable bundle
+        run: |
+          mkdir -p output/linux-portable
+          tar -czf output/linux-portable/scrum-updates-bot-linux-portable.tar.gz -C dist scrum-updates-bot
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages
+          path: |
+            build/deb/*.deb
+            output/linux-portable/*.tar.gz
+
+  publish-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - build-windows
+      - build-linux
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-packages
+          path: artifacts/windows
+
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-packages
+          path: artifacts/linux
+
+      - name: Publish GitHub release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/windows/**/*.exe
+            artifacts/windows/**/*.zip
+            artifacts/linux/**/*.deb
+            artifacts/linux/**/*.tar.gz

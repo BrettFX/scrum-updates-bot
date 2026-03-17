@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PYTHON_BIN="$ROOT_DIR/.venv/bin/python"
 
 if [[ ! -x "$PYTHON_BIN" ]]; then
-  echo "Missing virtual environment. Run $ROOT_DIR/scripts/bootstrap_linux.sh first." >&2
+  echo "Missing virtual environment. Run $ROOT_DIR/scripts/install_linux.sh --setup-only first." >&2
   exit 1
 fi
 

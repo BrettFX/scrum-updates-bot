@@ -2,6 +2,10 @@
 
 Scrum Updates Bot is a cross-platform desktop application for turning messy or structured scrum notes into polished YTB status updates for Teams and Outlook.
 
+For end users, the target distribution model is GitHub Releases: download a Windows installer `.exe` or a Linux `.deb` package without building from source.
+
+For developers working from Linux, the preferred Windows packaging path is to trigger the GitHub Actions Windows build from Linux and download the artifacts back locally.
+
 ## V1 scope
 
 - PySide6 desktop UI for Windows and Linux
@@ -32,30 +36,86 @@ Scrum Updates Bot is a cross-platform desktop application for turning messy or s
 
 ## Prerequisites
 
-1. Python 3.11+
+1. Python 3.11+ in general, but Python 3.12 is the supported target for local Windows packaging
 2. Ollama installed locally
 3. At least one local Ollama model pulled, for example `llama3.2:3b`
 
-## Setup
+## Quick start
+
+Linux uses one script to set up the environment and build a runnable app bundle:
 
 ```bash
-./scripts/bootstrap_linux.sh
+./scripts/install_linux.sh
 ```
 
-This project uses a repo-local `.venv` on Linux. That avoids conflicts with an active Anaconda shell such as `data-science`, because the scripts call `.venv/bin/python` directly instead of relying on the shell's current `python`.
+That creates a repo-local `.venv`, installs the app, and builds the runnable binary at `dist/scrum-updates-bot/scrum-updates-bot`.
+
+Windows also uses one script. Run it from a native Windows PowerShell session, not from WSL:
+
+```powershell
+.\scripts\install_windows.ps1
+```
+
+That creates `.venv`, installs the app, and builds the runnable executable at `dist\scrum-updates-bot\scrum-updates-bot.exe`.
+
+For local Windows packaging, use Python 3.12 if possible. Python 3.13 builds have shown `PySide6.QtWidgets` DLL load failures in local packaging.
+
+This local build flow is mainly for development. End users should use the packaged release artifacts instead of running PowerShell scripts.
+
+This repo still uses a local `.venv` on both platforms, so it does not depend on your active Anaconda shell.
+
+If PowerShell warns that the script came from another machine, run this once first from the extracted project folder:
+
+```powershell
+Unblock-File .\scripts\install_windows.ps1
+```
+
+If `py` is unavailable on your Windows machine, the installer script will also try a native `python` command on `PATH`. For local Windows packaging, install Python 3.12 first and verify one of these works:
+
+```powershell
+py -0p
+python --version
+```
+
+If your source tree currently lives under WSL, export a Windows-ready `.zip` from Linux first and then extract it into a normal Windows folder such as `C:\Users\<you>\Downloads\scrum-updates-bot`:
+
+```bash
+./scripts/export_windows_bundle.sh
+```
+
+You can also pass a custom destination path for the `.zip` file.
+
+If you want to avoid using a Windows machine during packaging, trigger the GitHub Actions packaging workflow from Linux instead:
+
+```bash
+export GITHUB_TOKEN=your_token_here
+./scripts/build_remote_packages.sh
+```
+
+That runs the Windows and Linux package builds on GitHub-hosted runners and downloads the resulting artifact zip files into `output/github-actions-artifacts`.
 
 ## Run
+
+```bash
+./dist/scrum-updates-bot/scrum-updates-bot
+```
+
+If you want the editable development launcher instead of the packaged Linux build, use:
 
 ```bash
 ./scripts/run_linux.sh
 ```
 
-This launcher uses the repo-local `.venv` directly, so it is safe even when an Anaconda environment such as `data-science` is active in the shell.
+On Windows, run the built executable with:
 
-If you want to test the packaged binary after building, run:
+```powershell
+.\dist\scrum-updates-bot\scrum-updates-bot.exe
+```
 
-```bash
-./dist/scrum-updates-bot/scrum-updates-bot
+If you want the editable development launcher on Windows instead, use:
+
+```powershell
+.\.venv\Scripts\python.exe -m scrum_updates_bot
 ```
 
 ## Ollama quick start
@@ -69,24 +129,49 @@ The app will also let you refresh the local model list and trigger model pulls f
 
 ## Windows direction
 
-The next packaging target is a Windows executable and installer built natively on Windows from the same codebase. The current repository already includes a PyInstaller starter script for that workflow in `scripts/build_windows.ps1`.
+The Windows `.exe` should be built natively on Windows. PyInstaller does not reliably cross-compile a true Windows executable from Linux, so the pragmatic flow is still:
+
+1. From Linux or WSL, export a Windows-ready bundle with `./scripts/export_windows_bundle.sh`.
+2. Extract that bundle into a normal Windows folder.
+3. Run `./scripts/install_windows.ps1` in Windows PowerShell using Python 3.12.
+
+If you want to stay entirely on Linux, do not try to cross-compile locally. Use `./scripts/build_remote_packages.sh` to trigger the GitHub Actions Windows build and download the finished artifacts.
+
+For non-technical users, the better path is a GitHub Release that includes:
+
+1. A Windows GUI installer `.exe` produced by Inno Setup.
+2. A Windows portable `.zip` for users who just want to unpack and run.
+3. A Linux `.deb` package for Ubuntu and Debian users.
+4. A Linux portable `.tar.gz` for manual unpack-and-run installs.
+
+If a local Windows source build fails with a `PySide6.QtWidgets` DLL import error, stop using that local build and switch to a Release-built installer or GitHub Actions Windows artifact.
+
+Recommended workflow from WSL:
+
+1. Create a Windows source bundle with `./scripts/export_windows_bundle.sh`.
+2. Move or extract that `.zip` into a normal Windows path such as `C:\Users\<you>\Downloads\scrum-updates-bot`.
+3. Open that extracted folder in Windows PowerShell.
+4. Run `./scripts/install_windows.ps1` there.
 
 ## Packaging direction
 
-The repository includes PyInstaller starter scripts for Windows and Linux packaging. Builds should be produced natively on each target OS and use the repo-local virtual environment rather than the active conda environment.
+The repository includes a single installer entrypoint per platform:
+
+- `./scripts/install_linux.sh`
+- `.\scripts\install_windows.ps1`
 
 For Linux, the recommended first-class installer target is Ubuntu and Debian via `.deb`. That gives the cleanest dependency story because `apt` can install the required Qt/XCB libraries automatically.
 
 ### Linux build
 
 ```bash
-./scripts/build_linux.sh
+./scripts/install_linux.sh
 ```
 
 ### Debian and Ubuntu package
 
 ```bash
-./scripts/build_deb.sh
+./scripts/install_linux.sh --deb
 ```
 
 This produces a `.deb` installer that places the app under `/opt/scrum-updates-bot`, installs a launcher at `/usr/bin/scrum-updates-bot`, and declares the required shared-library dependencies.
@@ -101,7 +186,37 @@ On newer Ubuntu releases, `libtiff5` may be replaced by `libtiff6`.
 
 ### Windows build
 
-Use `scripts/build_windows.ps1` from a Windows PowerShell session after creating a local `.venv` and installing `.[dev,build]` into it.
+Build the Windows executable natively on Windows from PowerShell:
+
+```powershell
+.\scripts\install_windows.ps1
+```
+
+This produces the runnable executable at `dist\scrum-updates-bot\scrum-updates-bot.exe`.
+
+Use Python 3.12 for this local build path.
+
+To create a Windows installer, install Inno Setup 6 and run:
+
+```powershell
+.\scripts\install_windows.ps1 -WithInstaller
+```
+
+This produces an installer `.exe` under `output\windows-installer`.
+
+## GitHub Releases
+
+The repository now includes a GitHub Actions workflow at `.github/workflows/release-packages.yml` that can:
+
+- build a Windows GUI installer `.exe`
+- build a Windows portable `.zip`
+- build a Linux `.deb`
+- build a Linux portable `.tar.gz`
+- attach those artifacts to a tagged GitHub Release
+
+For iterative development from Linux, `./scripts/build_remote_packages.sh` can dispatch that workflow without creating a release.
+
+To publish a release, push a tag such as `v0.1.0` to GitHub.
 
 See [docs/PACKAGING.md](docs/PACKAGING.md) for the distro support strategy and installer rationale.
 
