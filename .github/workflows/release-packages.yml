@@ -26,18 +26,20 @@ jobs:
           python-version: '3.12'
 
       - name: Install Inno Setup
-        shell: powershell
+        shell: pwsh
         run: choco install innosetup --no-progress -y
 
       - name: Prepare Windows CI log directory
-        shell: powershell
-        run: New-Item -ItemType Directory -Force -Path output\ci-logs | Out-Null
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path output\ci-logs | Out-Null
+          "Windows CI logs use UTF-8 encoding." | Out-File -FilePath output\ci-logs\00-readme.log -Encoding utf8
 
       - name: Create Windows virtual environment
-        shell: powershell
+        shell: pwsh
         run: |
           $log = 'output\ci-logs\01-create-venv.log'
-          'Creating Windows virtual environment' | Set-Content -Path $log
+          'Creating Windows virtual environment' | Out-File -FilePath $log -Encoding utf8
           & py -3.12 -m venv .venv 2>&1 | Tee-Object -FilePath $log -Append
           "Exit code: $LASTEXITCODE" | Tee-Object -FilePath $log -Append
           if ($LASTEXITCODE -ne 0) {
@@ -45,10 +47,10 @@ jobs:
           }
 
       - name: Capture Windows Python environment details
-        shell: powershell
+        shell: pwsh
         run: |
           $log = 'output\ci-logs\02-python-version.log'
-          'Capturing Python version' | Set-Content -Path $log
+          'Capturing Python version' | Out-File -FilePath $log -Encoding utf8
           & .\.venv\Scripts\python.exe -VV 2>&1 | Tee-Object -FilePath $log -Append
           "Exit code: $LASTEXITCODE" | Tee-Object -FilePath $log -Append
           if ($LASTEXITCODE -ne 0) {
@@ -56,10 +58,10 @@ jobs:
           }
 
       - name: Upgrade Windows packaging tools
-        shell: powershell
+        shell: pwsh
         run: |
           $log = 'output\ci-logs\03-pip-upgrade.log'
-          'Upgrading pip, setuptools, and wheel' | Set-Content -Path $log
+          'Upgrading pip, setuptools, and wheel' | Out-File -FilePath $log -Encoding utf8
           & .\.venv\Scripts\python.exe -m pip install --upgrade pip setuptools wheel 2>&1 | Tee-Object -FilePath $log -Append
           "Exit code: $LASTEXITCODE" | Tee-Object -FilePath $log -Append
           if ($LASTEXITCODE -ne 0) {
@@ -67,21 +69,21 @@ jobs:
           }
 
       - name: Install Windows package dependencies
-        shell: powershell
+        shell: pwsh
         run: |
           $log = 'output\ci-logs\04-pip-install.log'
-          'Installing package and build dependencies' | Set-Content -Path $log
-          & .\.venv\Scripts\python.exe -m pip install ".[build]" 2>&1 | Tee-Object -FilePath $log -Append
+          'Installing package and build dependencies' | Out-File -FilePath $log -Encoding utf8
+          & .\.venv\Scripts\python.exe -m pip install --verbose ".[build]" 2>&1 | Tee-Object -FilePath $log -Append
           "Exit code: $LASTEXITCODE" | Tee-Object -FilePath $log -Append
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
           }
 
       - name: Build Windows executable
-        shell: powershell
+        shell: pwsh
         run: |
           $log = 'output\ci-logs\05-pyinstaller.log'
-          'Running PyInstaller' | Set-Content -Path $log
+          'Running PyInstaller' | Out-File -FilePath $log -Encoding utf8
           & .\.venv\Scripts\python.exe -m PyInstaller --noconfirm --clean scrum-updates-bot.spec 2>&1 | Tee-Object -FilePath $log -Append
           "Exit code: $LASTEXITCODE" | Tee-Object -FilePath $log -Append
           if ($LASTEXITCODE -ne 0) {
@@ -94,7 +96,7 @@ jobs:
 
       - name: Show Windows build output
         if: always()
-        shell: powershell
+        shell: pwsh
         run: |
           Write-Host "dist directory"
           if (Test-Path dist) {
@@ -115,10 +117,10 @@ jobs:
           }
 
       - name: Build Windows installer
-        shell: powershell
+        shell: pwsh
         run: |
           $log = 'output\ci-logs\06-inno-setup.log'
-          'Running Inno Setup' | Set-Content -Path $log
+          'Running Inno Setup' | Out-File -FilePath $log -Encoding utf8
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" packaging\windows\scrum-updates-bot.iss 2>&1 | Tee-Object -FilePath $log -Append
           "Exit code: $LASTEXITCODE" | Tee-Object -FilePath $log -Append
           if ($LASTEXITCODE -ne 0) {
@@ -126,7 +128,7 @@ jobs:
           }
 
       - name: Archive Windows portable bundle
-        shell: powershell
+        shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path output\windows-portable | Out-Null
           Compress-Archive -Path dist\scrum-updates-bot\* -DestinationPath output\windows-portable\scrum-updates-bot-windows-portable.zip -Force
