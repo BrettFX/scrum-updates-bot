@@ -37,16 +37,22 @@ jobs:
         shell: powershell
         run: py -3.12 -m venv .venv 2>&1 | Tee-Object -FilePath output\ci-logs\01-create-venv.log
 
-      - name: Install Windows build dependencies
+      - name: Capture Windows Python environment details
         shell: powershell
-        run: |
-          .\.venv\Scripts\python.exe -m pip install --upgrade pip 2>&1 | Tee-Object -FilePath output\ci-logs\02-pip-upgrade.log
-          .\.venv\Scripts\python.exe -m pip install -e ".[build]" 2>&1 | Tee-Object -FilePath output\ci-logs\03-pip-install.log
+        run: .\.venv\Scripts\python.exe -VV 2>&1 | Tee-Object -FilePath output\ci-logs\02-python-version.log
+
+      - name: Upgrade Windows packaging tools
+        shell: powershell
+        run: .\.venv\Scripts\python.exe -m pip install --upgrade pip setuptools wheel 2>&1 | Tee-Object -FilePath output\ci-logs\03-pip-upgrade.log
+
+      - name: Install Windows package dependencies
+        shell: powershell
+        run: .\.venv\Scripts\python.exe -m pip install ".[build]" 2>&1 | Tee-Object -FilePath output\ci-logs\04-pip-install.log
 
       - name: Build Windows executable
         shell: powershell
         run: |
-          .\.venv\Scripts\python.exe -m PyInstaller --noconfirm --clean scrum-updates-bot.spec 2>&1 | Tee-Object -FilePath output\ci-logs\04-pyinstaller.log
+          .\.venv\Scripts\python.exe -m PyInstaller --noconfirm --clean scrum-updates-bot.spec 2>&1 | Tee-Object -FilePath output\ci-logs\05-pyinstaller.log
           if (-not (Test-Path 'dist\scrum-updates-bot\scrum-updates-bot.exe')) {
             throw 'PyInstaller completed without producing dist\\scrum-updates-bot\\scrum-updates-bot.exe'
           }
@@ -76,7 +82,7 @@ jobs:
       - name: Build Windows installer
         shell: powershell
         run: |
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" packaging\windows\scrum-updates-bot.iss 2>&1 | Tee-Object -FilePath output\ci-logs\05-inno-setup.log
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" packaging\windows\scrum-updates-bot.iss 2>&1 | Tee-Object -FilePath output\ci-logs\06-inno-setup.log
 
       - name: Archive Windows portable bundle
         shell: powershell
