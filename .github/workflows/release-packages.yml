@@ -35,25 +35,60 @@ jobs:
 
       - name: Create Windows virtual environment
         shell: powershell
-        run: py -3.12 -m venv .venv 2>&1 | Tee-Object -FilePath output\ci-logs\01-create-venv.log
+        run: |
+          $log = 'output\ci-logs\01-create-venv.log'
+          'Creating Windows virtual environment' | Set-Content -Path $log
+          & py -3.12 -m venv .venv 2>&1 | Tee-Object -FilePath $log -Append
+          "Exit code: $LASTEXITCODE" | Tee-Object -FilePath $log -Append
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
 
       - name: Capture Windows Python environment details
         shell: powershell
-        run: .\.venv\Scripts\python.exe -VV 2>&1 | Tee-Object -FilePath output\ci-logs\02-python-version.log
+        run: |
+          $log = 'output\ci-logs\02-python-version.log'
+          'Capturing Python version' | Set-Content -Path $log
+          & .\.venv\Scripts\python.exe -VV 2>&1 | Tee-Object -FilePath $log -Append
+          "Exit code: $LASTEXITCODE" | Tee-Object -FilePath $log -Append
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
 
       - name: Upgrade Windows packaging tools
         shell: powershell
-        run: .\.venv\Scripts\python.exe -m pip install --upgrade pip setuptools wheel 2>&1 | Tee-Object -FilePath output\ci-logs\03-pip-upgrade.log
+        run: |
+          $log = 'output\ci-logs\03-pip-upgrade.log'
+          'Upgrading pip, setuptools, and wheel' | Set-Content -Path $log
+          & .\.venv\Scripts\python.exe -m pip install --upgrade pip setuptools wheel 2>&1 | Tee-Object -FilePath $log -Append
+          "Exit code: $LASTEXITCODE" | Tee-Object -FilePath $log -Append
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
 
       - name: Install Windows package dependencies
         shell: powershell
-        run: .\.venv\Scripts\python.exe -m pip install ".[build]" 2>&1 | Tee-Object -FilePath output\ci-logs\04-pip-install.log
+        run: |
+          $log = 'output\ci-logs\04-pip-install.log'
+          'Installing package and build dependencies' | Set-Content -Path $log
+          & .\.venv\Scripts\python.exe -m pip install ".[build]" 2>&1 | Tee-Object -FilePath $log -Append
+          "Exit code: $LASTEXITCODE" | Tee-Object -FilePath $log -Append
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
 
       - name: Build Windows executable
         shell: powershell
         run: |
-          .\.venv\Scripts\python.exe -m PyInstaller --noconfirm --clean scrum-updates-bot.spec 2>&1 | Tee-Object -FilePath output\ci-logs\05-pyinstaller.log
+          $log = 'output\ci-logs\05-pyinstaller.log'
+          'Running PyInstaller' | Set-Content -Path $log
+          & .\.venv\Scripts\python.exe -m PyInstaller --noconfirm --clean scrum-updates-bot.spec 2>&1 | Tee-Object -FilePath $log -Append
+          "Exit code: $LASTEXITCODE" | Tee-Object -FilePath $log -Append
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
           if (-not (Test-Path 'dist\scrum-updates-bot\scrum-updates-bot.exe')) {
+            'Executable was not created at dist\scrum-updates-bot\scrum-updates-bot.exe' | Tee-Object -FilePath $log -Append
             throw 'PyInstaller completed without producing dist\\scrum-updates-bot\\scrum-updates-bot.exe'
           }
 
@@ -82,7 +117,13 @@ jobs:
       - name: Build Windows installer
         shell: powershell
         run: |
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" packaging\windows\scrum-updates-bot.iss 2>&1 | Tee-Object -FilePath output\ci-logs\06-inno-setup.log
+          $log = 'output\ci-logs\06-inno-setup.log'
+          'Running Inno Setup' | Set-Content -Path $log
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" packaging\windows\scrum-updates-bot.iss 2>&1 | Tee-Object -FilePath $log -Append
+          "Exit code: $LASTEXITCODE" | Tee-Object -FilePath $log -Append
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
 
       - name: Archive Windows portable bundle
         shell: powershell
