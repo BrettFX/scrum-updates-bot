@@ -50,6 +50,7 @@ def github_request(url: str, token: str, method: str = "GET", data: dict | None 
     request.add_header("Accept", "application/vnd.github+json")
     request.add_header("Authorization", f"Bearer {token}")
     request.add_header("X-GitHub-Api-Version", "2022-11-28")
+    request.add_header("User-Agent", "scrum-updates-bot-remote-builder")
     if payload is not None:
         request.add_header("Content-Type", "application/json")
 
@@ -61,6 +62,48 @@ def github_request(url: str, token: str, method: str = "GET", data: dict | None 
         if not body:
             return None
         return json.loads(body)
+
+
+def format_http_error(exc: HTTPError) -> str:
+    detail = ""
+    try:
+        charset = exc.headers.get_content_charset() or "utf-8"
+        detail = exc.read().decode(charset).strip()
+    except Exception:
+        detail = ""
+
+    if detail:
+        try:
+            parsed = json.loads(detail)
+            message = parsed.get("message")
+            errors = parsed.get("errors")
+            detail = message or detail
+            if errors:
+                detail = f"{detail} | errors: {errors}"
+        except json.JSONDecodeError:
+            pass
+
+    base = f"HTTP Error {exc.code}: {exc.reason}"
+    if detail:
+        return f"{base} - {detail}"
+    return base
+
+
+def check_branch_push_state(root: Path, branch: str) -> None:
+    try:
+        upstream = run_git_command(["rev-parse", "--abbrev-ref", f"{branch}@{{upstream}}"], root)
+        counts = run_git_command(["rev-list", "--left-right", "--count", f"{upstream}...HEAD"], root)
+        behind_count, ahead_count = [int(value) for value in counts.split()]
+    except subprocess.CalledProcessError:
+        print("Warning: this branch has no upstream configured. Remote builds use code already pushed to GitHub.")
+        return
+
+    if ahead_count > 0:
+        print(f"Warning: local branch '{branch}' is ahead of '{upstream}' by {ahead_count} commit(s).")
+        print("Remote builds run the code on GitHub, not your unpushed local changes. Push first if you want those changes included.")
+    elif behind_count > 0:
+        print(f"Warning: local branch '{branch}' is behind '{upstream}' by {behind_count} commit(s).")
+        print("Remote builds will run whatever is currently on GitHub for that branch.")
 
 
 def trigger_workflow(owner: str, repo: str, ref: str, token: str) -> None:
@@ -146,6 +189,8 @@ def main() -> int:
         print(str(exc), file=sys.stderr)
         return 1
 
+    check_branch_push_state(root, ref)
+
     started_after = datetime.now(timezone.utc)
     print(f"Triggering workflow '{WORKFLOW_FILE}' for {owner}/{repo} on ref '{ref}'")
 
@@ -165,7 +210,23 @@ def main() -> int:
         print(f"Workflow run created: {run.get('html_url')}")
         wait_for_run(owner, repo, run_id, token, args.poll_seconds)
         artifact_paths = download_artifacts(owner, repo, run_id, token, Path(args.output_dir))
-    except (HTTPError, URLError, RuntimeError) as exc:
+    except HTTPError as exc:
+        message = format_http_error(exc)
+        print(message, file=sys.stderr)
+        if exc.code == 403:
+            print(
+                "GitHub rejected the request. Common causes:\n"
+                "1. The token does not have permission for this repository.\n"
+                "2. The token is missing Actions workflow permissions.\n"
+                "3. The repository workflow file is not yet pushed to GitHub.\n\n"
+                "Token requirements:\n"
+                "- Fine-grained PAT: repository access to this repo with Actions=Read and write, Contents=Read and write, Metadata=Read.\n"
+                "- Classic PAT: repo and workflow scopes.\n\n"
+                "Also make sure you have pushed the latest commit before triggering the remote build.",
+                file=sys.stderr,
+            )
+        return 1
+    except (URLError, RuntimeError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
 

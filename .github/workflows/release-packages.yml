@@ -9,16 +9,19 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build-windows:
     runs-on: windows-latest
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -26,15 +29,52 @@ jobs:
         shell: powershell
         run: choco install innosetup --no-progress -y
 
-      - name: Build Windows executable and installer
+      - name: Build Windows executable
         shell: powershell
-        run: .\scripts\install_windows.ps1 -WithInstaller
+        run: .\scripts\install_windows.ps1
+
+      - name: Show Windows build output
+        if: always()
+        shell: powershell
+        run: |
+          Write-Host "dist directory"
+          if (Test-Path dist) {
+            Get-ChildItem -Recurse dist | Select-Object FullName, Length
+          } else {
+            Write-Host "dist directory not found"
+          }
+          Write-Host "build directory"
+          if (Test-Path build) {
+            Get-ChildItem -Recurse build | Select-Object FullName, Length
+          } else {
+            Write-Host "build directory not found"
+          }
+          $warnFile = 'build\scrum-updates-bot\warn-scrum-updates-bot.txt'
+          if (Test-Path $warnFile) {
+            Write-Host "PyInstaller warnings"
+            Get-Content $warnFile
+          }
+
+      - name: Build Windows installer
+        shell: powershell
+        run: .\scripts\install_windows.ps1 -BuildOnly -WithInstaller
 
       - name: Archive Windows portable bundle
         shell: powershell
         run: |
           New-Item -ItemType Directory -Force -Path output\windows-portable | Out-Null
           Compress-Archive -Path dist\scrum-updates-bot\* -DestinationPath output\windows-portable\scrum-updates-bot-windows-portable.zip -Force
+
+      - name: Upload Windows debug artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-debug-artifacts
+          path: |
+            build/**
+            dist/**
+            output/windows-installer/**
+          if-no-files-found: warn
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
@@ -49,10 +89,10 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 

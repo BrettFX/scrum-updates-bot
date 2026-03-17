@@ -89,10 +89,18 @@ If you want to avoid using a Windows machine during packaging, trigger the GitHu
 
 ```bash
 export GITHUB_TOKEN=your_token_here
+git push origin master
 ./scripts/build_remote_packages.sh
 ```
 
 That runs the Windows and Linux package builds on GitHub-hosted runners and downloads the resulting artifact zip files into `output/github-actions-artifacts`.
+
+For the token:
+
+- Fine-grained PAT: grant repository access to this repo with `Actions: Read and write`, `Contents: Read and write`, and `Metadata: Read`.
+- Classic PAT: grant `repo` and `workflow` scopes.
+
+Remote builds always run the code already pushed to GitHub, not unpushed local commits.
 
 ## Run
 

@@ -48,6 +48,13 @@ The practical approach is:
 
 If you want to stay on Linux end to end, use `./scripts/build_remote_packages.sh` with a GitHub token. That script dispatches the GitHub Actions packaging workflow, waits for completion, and downloads the Windows and Linux artifact zip files locally.
 
+Push your current branch before triggering the workflow, because remote builds run the code already on GitHub.
+
+Recommended token permissions:
+
+1. Fine-grained PAT: repository access to this repo with `Actions: Read and write`, `Contents: Read and write`, and `Metadata: Read`.
+2. Classic PAT: `repo` and `workflow` scopes.
+
 ## Current Windows runtime issue
 
 If a locally built Windows executable fails during `PySide6.QtWidgets` import, the most likely causes are an incomplete PySide6 bundle or a Windows-specific runtime mismatch in the local build environment.
