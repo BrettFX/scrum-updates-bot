@@ -143,6 +143,30 @@ If you want the editable development launcher on Windows instead, use:
 .\.venv\Scripts\python.exe -m scrum_updates_bot
 ```
 
+If the native Windows build keeps failing, you can launch the Linux app through WSL and still give users a desktop shortcut on Windows:
+
+```powershell
+.\scripts\create_windows_wsl_shortcut.ps1
+```
+
+That creates a desktop shortcut which calls `wsl.exe` and launches the app from your WSL checkout. You can also target the packaged Linux binary instead of the development launcher:
+
+```powershell
+.\scripts\create_windows_wsl_shortcut.ps1 -UsePackagedBinary
+```
+
+By default, the shortcut creator resolves the Linux project path once and writes that path into the shortcut arguments. It first tries the current repo path through `wslpath`, then falls back to common WSL locations such as `~/GitHub/<repo>`. If your WSL checkout lives somewhere else, pass it explicitly:
+
+```powershell
+.\scripts\create_windows_wsl_shortcut.ps1 -LinuxProjectDir /home/<you>/GitHub/scrum-updates-bot
+```
+
+Notes:
+
+- This works best with WSLg so Linux GUI apps can appear as normal windows on the Windows desktop.
+- Ollama must be installed and running inside WSL for this mode.
+- If you use a non-default WSL distro, pass `-Distro <name>`.
+
 ## Ollama quick start
 
 ```bash
