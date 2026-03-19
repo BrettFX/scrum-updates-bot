@@ -30,13 +30,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from scrum_updates_bot.core.models import AppSettings, DraftDocument, YTBReport
+from scrum_updates_bot.core.models import AppSettings, DraftDocument, PromptTemplateDocument, YTBReport
 from scrum_updates_bot.core.prompts import PRESET_GUIDANCE
 from scrum_updates_bot.core.rendering import render_report_html, render_report_markdown, render_report_text
 from scrum_updates_bot.services.generator import YTBGeneratorService
 from scrum_updates_bot.services.ollama import OllamaClient, OllamaError
 from scrum_updates_bot.services.ollama_setup import is_ollama_cli_installed, ollama_install_instructions
 from scrum_updates_bot.storage.drafts import DraftStore
+from scrum_updates_bot.storage.prompt_templates import PromptTemplateStore
 from scrum_updates_bot.storage.settings import SettingsStore
 from scrum_updates_bot.ui.workers import ReportWorker
 
@@ -47,6 +48,7 @@ class MainWindow(QMainWindow):
         self.settings_store = SettingsStore()
         self.settings = self.settings_store.load()
         self.draft_store = DraftStore()
+        self.template_store = PromptTemplateStore()
         self.ollama_client = OllamaClient(self.settings.ollama_base_url)
         self.generator = YTBGeneratorService(self.ollama_client)
         self.current_report: YTBReport | None = None
@@ -87,6 +89,14 @@ class MainWindow(QMainWindow):
         load_action = QAction("Load Draft", self)
         load_action.triggered.connect(self.load_draft)
         toolbar.addAction(load_action)
+
+        save_template_action = QAction("Save Prompt Template", self)
+        save_template_action.triggered.connect(self.save_prompt_template)
+        toolbar.addAction(save_template_action)
+
+        load_template_action = QAction("Load Prompt Template", self)
+        load_template_action.triggered.connect(self.load_prompt_template)
+        toolbar.addAction(load_template_action)
 
         central = QWidget(self)
         layout = QVBoxLayout(central)
@@ -578,6 +588,42 @@ class MainWindow(QMainWindow):
         self.settings.last_draft_name = name.strip()
         self._persist_ui_settings()
         self.append_activity(f"Saved draft to {path}.")
+
+    def save_prompt_template(self) -> None:
+        content = self.raw_input.toPlainText()
+        if not content.strip():
+            QMessageBox.information(self, "No prompt text", "Enter prompt text before saving a template.")
+            return
+        name, accepted = QInputDialog.getText(
+            self,
+            "Save prompt template",
+            "Template name:",
+            text="Prompt Template",
+        )
+        if not accepted or not name.strip():
+            return
+        template = PromptTemplateDocument(name=name.strip(), content=content)
+        path = self.template_store.save(template)
+        self.append_activity(f"Saved prompt template to {path}.")
+
+    def load_prompt_template(self) -> None:
+        templates = [self.template_store.load(path) for path in self.template_store.list_templates()]
+        if not templates:
+            QMessageBox.information(self, "No templates", "No saved prompt templates were found.")
+            return
+        names = [template.name for template in templates]
+        selected_name, accepted = QInputDialog.getItem(
+            self,
+            "Load prompt template",
+            "Choose a template:",
+            names,
+            editable=False,
+        )
+        if not accepted or not selected_name:
+            return
+        selected_template = next(template for template in templates if template.name == selected_name)
+        self.raw_input.setPlainText(selected_template.content)
+        self.append_activity(f"Loaded prompt template {selected_template.name} into the input field.")
 
     def load_draft(self) -> None:
         drafts = self.draft_store.list_drafts()

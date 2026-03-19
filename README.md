@@ -14,6 +14,7 @@ For developers working from Linux, the preferred Windows packaging path is to tr
 - Rich-text YTB preview with bold labels and hyperlinks
 - Copy to clipboard as both HTML and plain text
 - Autosaved session restore plus named drafts
+- Named prompt templates for the input field, including a seeded story update template
 - Export to `.txt`, `.md`, and `.html`
 - Template presets for different YTB tones
 - Structured-note fast path for low-latency formatting
@@ -25,6 +26,7 @@ For developers working from Linux, the preferred Windows packaging path is to tr
 - Freeform notes use Ollama with live progress updates in the loading area.
 - The last session is restored automatically, including notes, generated output, selected model, selected preset, and activity history.
 - Presets currently include `Standard YTB`, `Leadership Update`, and `Concise Standup`.
+- Prompt templates can be saved and loaded from the toolbar, and loading a template replaces the current input text.
 - Full story titles can be copied/exported as hyperlinks when ticket URLs are available.
 
 ## Architecture

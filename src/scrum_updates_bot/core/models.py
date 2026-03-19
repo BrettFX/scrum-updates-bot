@@ -54,6 +54,13 @@ class DraftDocument(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class PromptTemplateDocument(BaseModel):
+    name: str = Field(..., min_length=1)
+    content: str = ""
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class AppSettings(BaseModel):
     ollama_base_url: str = "http://127.0.0.1:11434"
     model_name: str = "llama3.2:3b"
