@@ -61,6 +61,46 @@ def _apply_preset(yesterday: str, today: str, blockers: str, story_title: str, p
     return _ensure_sentence(yesterday) if yesterday != "None (Complete)" else yesterday, _ensure_sentence(today) if today != "None (Complete)" else today, blockers or "None"
 
 
+_FUTURE_MARKERS = re.compile(
+    r"\b(going to|will be|will |plan to|planning to|intend to|want to|"
+    r"today i|focus for today|continue with|next step|working on next|"
+    r"scheduled to|aiming to|hoping to)\b",
+    re.IGNORECASE,
+)
+
+
+def _strip_filler_openers(text: str) -> str:
+    """Remove leading first-person pronouns and connector words from a sentence."""
+    return re.sub(
+        r"^(I\s+(also\s+|additionally\s+)?|also[,\s]+|additionally[,\s]+|furthermore[,\s]+|moreover[,\s]+)",
+        "",
+        text.strip(),
+        flags=re.IGNORECASE,
+    ).strip()
+
+
+def _compress_to_one_sentence(phrases: list[str]) -> str:
+    """Compress a list of action phrases into one clean professional sentence."""
+    if not phrases:
+        return ""
+    cleaned = []
+    for phrase in phrases:
+        phrase = _strip_filler_openers(phrase).rstrip(".!?,;:").strip()
+        if phrase:
+            cleaned.append(phrase[0].upper() + phrase[1:])
+    if not cleaned:
+        return ""
+    if len(cleaned) == 1:
+        return _ensure_sentence(cleaned[0])
+    if len(cleaned) == 2:
+        second = cleaned[1][0].lower() + cleaned[1][1:]
+        return _ensure_sentence(f"{cleaned[0]} and {second}")
+    head = cleaned[0]
+    mid = ", ".join(c[0].lower() + c[1:] for c in cleaned[1:-1])
+    last = cleaned[-1][0].lower() + cleaned[-1][1:]
+    return _ensure_sentence(f"{head}, {mid}, and {last}")
+
+
 def has_structured_story_blocks(raw_input: str) -> bool:
     return bool(STORY_BLOCK_PATTERN.search(raw_input))
 
@@ -85,16 +125,14 @@ def fallback_normalize(raw_input: str) -> NormalizedStoryCollection:
             yesterday = "None (Complete)"
             today = "None (Complete)"
         elif cleaned_body:
-            sentences = re.split(r"(?<=[.!?])\s+", cleaned_body)
-            if len(sentences) == 1:
-                yesterday = sentences[0].strip()
-                today = "Continue refining and advancing this story based on current progress."
-            else:
-                yesterday = sentences[0].strip()
-                today = " ".join(sentence.strip() for sentence in sentences[1:] if sentence.strip()) or "Continue advancing this story today."
+            sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", cleaned_body) if s.strip()]
+            past_sentences = [s for s in sentences if not _FUTURE_MARKERS.search(s)]
+            planned_sentences = [s for s in sentences if _FUTURE_MARKERS.search(s)]
+            yesterday = _compress_to_one_sentence(past_sentences) if past_sentences else _compress_to_one_sentence(sentences[:1])
+            today = _compress_to_one_sentence(planned_sentences) if planned_sentences else f"Continue advancing {title}."
         else:
-            yesterday = "Worked on the story based on current priorities."
-            today = "Continue moving the story forward today."
+            yesterday = f"Made progress on {title}."
+            today = f"Continue advancing {title}."
 
         stories.append(
             NormalizedStory(
