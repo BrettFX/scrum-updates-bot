@@ -26,13 +26,11 @@ def _ensure_sentence(text: str) -> str:
     return f"{cleaned}."
 
 
-def _shorten_text(text: str, max_words: int) -> str:
+def _first_sentence(text: str) -> str:
+    """Return the first complete sentence; avoids mid-thought word truncation."""
     cleaned = _normalize_text(text)
-    words = cleaned.split()
-    if len(words) <= max_words:
-        return _ensure_sentence(cleaned)
-    shortened = " ".join(words[:max_words]).rstrip(",;:")
-    return f"{shortened}..."
+    parts = re.split(r"(?<=[.!?])\s+", cleaned)
+    return _ensure_sentence(parts[0]) if parts else _ensure_sentence(cleaned)
 
 
 def _leadership_phrase(story_title: str, text: str, prefix: str) -> str:
@@ -53,9 +51,9 @@ def _apply_preset(yesterday: str, today: str, blockers: str, story_title: str, p
         return leadership_yesterday, leadership_today, leadership_blockers
 
     if preset_name == "Concise Standup":
-        concise_yesterday = yesterday if yesterday == "None (Complete)" else _shorten_text(yesterday, 9)
-        concise_today = today if today == "None (Complete)" else _shorten_text(today, 10)
-        concise_blockers = blockers if blockers == "None" else _shorten_text(blockers, 8)
+        concise_yesterday = yesterday if yesterday == "None (Complete)" else _first_sentence(yesterday)
+        concise_today = today if today == "None (Complete)" else _first_sentence(today)
+        concise_blockers = blockers if blockers == "None" else _first_sentence(blockers)
         return concise_yesterday, concise_today, concise_blockers
 
     return _ensure_sentence(yesterday) if yesterday != "None (Complete)" else yesterday, _ensure_sentence(today) if today != "None (Complete)" else today, blockers or "None"
@@ -129,10 +127,10 @@ def fallback_normalize(raw_input: str) -> NormalizedStoryCollection:
             past_sentences = [s for s in sentences if not _FUTURE_MARKERS.search(s)]
             planned_sentences = [s for s in sentences if _FUTURE_MARKERS.search(s)]
             yesterday = _compress_to_one_sentence(past_sentences) if past_sentences else _compress_to_one_sentence(sentences[:1])
-            today = _compress_to_one_sentence(planned_sentences) if planned_sentences else f"Continue advancing {title}."
+            today = _compress_to_one_sentence(planned_sentences) if planned_sentences else f"Will continue advancing {title}."
         else:
             yesterday = f"Made progress on {title}."
-            today = f"Continue advancing {title}."
+            today = f"Will continue advancing {title}."
 
         stories.append(
             NormalizedStory(
@@ -174,7 +172,7 @@ def fallback_generate(normalized: NormalizedStoryCollection, preset_name: str) -
     for item in normalized.stories:
         completed = item.story.status == "done"
         yesterday = item.yesterday_notes or ("None (Complete)" if completed else "Worked on the story yesterday.")
-        today = item.today_notes or ("None (Complete)" if completed else "Continue the planned work for this story today.")
+        today = item.today_notes or ("None (Complete)" if completed else "Will continue the planned work for this story today.")
         blockers = item.blockers or "None"
         yesterday, today, blockers = _apply_preset(yesterday, today, blockers, item.story.title, preset_name)
         entries.append(

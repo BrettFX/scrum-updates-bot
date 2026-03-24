@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from time import perf_counter
 
 from PySide6.QtCore import QMimeData, Qt, QTimer
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QTextCursor
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -651,6 +652,7 @@ class MainWindow(QMainWindow):
         self._set_generating_state(True)
         self.current_worker = ReportWorker(self.generator, raw_input, model_name, preset_name)
         self.current_worker.progress.connect(self.on_generation_progress)
+        self.current_worker.streamed.connect(self.on_stream_token)
         self.current_worker.succeeded.connect(self.on_report_ready)
         self.current_worker.failed.connect(self.on_report_failed)
         self.current_worker.start()
@@ -658,6 +660,34 @@ class MainWindow(QMainWindow):
     def on_generation_progress(self, message: str) -> None:
         self.output_loading_label.setText(message)
         self.statusBar().showMessage(message, 0)
+
+    def on_stream_token(self, accumulated: str) -> None:
+        rendered = self._render_partial_stream(accumulated)
+        self.output_editor.setPlainText(rendered)
+        cursor = self.output_editor.textCursor()
+        cursor.movePosition(QTextCursor.End)
+        self.output_editor.setTextCursor(cursor)
+
+    def _render_partial_stream(self, accumulated: str) -> str:
+        """Extract complete entries from partial streaming JSON and render as readable text."""
+        entry_re = re.compile(
+            r'"story_title"\s*:\s*"((?:[^"\\]|\\.)*)"'
+            r'.*?"yesterday"\s*:\s*"((?:[^"\\]|\\.)*)"'
+            r'.*?"today"\s*:\s*"((?:[^"\\]|\\.)*)"'
+            r'.*?"blockers"\s*:\s*"((?:[^"\\]|\\.)*)"',
+            re.DOTALL,
+        )
+        lines: list[str] = []
+        for m in entry_re.finditer(accumulated):
+            if lines:
+                lines.append("")
+            lines.append(f"Story: {m.group(1).replace(chr(92) + chr(34), chr(34))}")
+            lines.append(f"Yesterday: {m.group(2).replace(chr(92) + chr(34), chr(34))}")
+            lines.append(f"Today: {m.group(3).replace(chr(92) + chr(34), chr(34))}")
+            lines.append(f"Blockers: {m.group(4).replace(chr(92) + chr(34), chr(34))}")
+        lines.append("")
+        lines.append("Generating\u2026")
+        return "\n".join(lines)
 
     def on_report_ready(self, report: YTBReport) -> None:
         self._set_generating_state(False)
@@ -681,7 +711,7 @@ class MainWindow(QMainWindow):
         self.current_worker = None
 
     def _set_generating_state(self, is_generating: bool) -> None:
-        self.output_editor.setDisabled(is_generating)
+        self.output_editor.setReadOnly(is_generating)
         self.output_loading_label.setVisible(is_generating)
         self.output_loading_indicator.setVisible(is_generating)
         self.generate_button.setDisabled(is_generating)

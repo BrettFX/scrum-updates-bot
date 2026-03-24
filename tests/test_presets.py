@@ -12,7 +12,7 @@ def sample_normalized() -> NormalizedStoryCollection:
                     ticket_url="https://jira.faa.gov/browse/FCSCCE-8872",
                     status="in_progress",
                 ),
-                yesterday_notes="Transitioned guided mode to a fully chat-based interface following the FCS checklist.",
+                yesterday_notes="Transitioned guided mode to a fully chat-based interface following the FCS checklist. Completed unit tests for the new chat components and performed a code review.",
                 today_notes="Focus on refining the feature by fixing minor bugs and enhancing the user experience.",
                 blockers="None",
             )

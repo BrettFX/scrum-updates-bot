@@ -1,6 +1,7 @@
 import json
 
 from scrum_updates_bot.services.generator import YTBGeneratorService
+from scrum_updates_bot.services.ollama import OllamaError
 
 
 class FakeOllamaClient:
@@ -25,9 +26,26 @@ class FakeOllamaClient:
 
     def stream_json_text(self, model_name: str, system_prompt: str, user_prompt: str):
         self.calls += 1
-        yield '{"entries": ['
-        yield '{"entries": [{"story_title": "Generated via LLM", "ticket_id": "ABC-1", "ticket_url": "https://example.com/ABC-1", '
+        yield '{}'
+        yield '{"entries": []}'
         yield '{"entries": [{"story_title": "Generated via LLM", "ticket_id": "ABC-1", "ticket_url": "https://example.com/ABC-1", "yesterday": "Did work.", "today": "More work.", "blockers": "None", "completed": false}]}'
+
+    def _coerce_json(self, raw: str):
+        return json.loads(raw)
+
+
+class FailingOllamaClient:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def stream_json_text(self, model_name: str, system_prompt: str, user_prompt: str):
+        self.calls += 1
+        raise OllamaError("Ollama not running")
+        yield  # make it a generator
+
+    def generate_json(self, model_name: str, system_prompt: str, user_prompt: str):
+        self.calls += 1
+        raise OllamaError("Ollama not running")
 
     def _coerce_json(self, raw: str):
         return json.loads(raw)
@@ -40,14 +58,24 @@ Got rid of guided mode forms and is now completely chat based and sticks to the 
 '''
 
 
-def test_structured_input_uses_preset_specific_fast_path_without_llm() -> None:
+def test_structured_input_uses_llm_for_generation() -> None:
     client = FakeOllamaClient()
+    service = YTBGeneratorService(client)
+
+    report = service.generate_report(STRUCTURED_INPUT, "llama3.2:3b", "Standard YTB")
+
+    assert client.calls == 1
+    assert report.entries[0].story_title == "Generated via LLM"
+
+
+def test_structured_input_falls_back_when_ollama_unavailable() -> None:
+    client = FailingOllamaClient()
     service = YTBGeneratorService(client)
 
     standard = service.generate_report(STRUCTURED_INPUT, "llama3.2:3b", "Standard YTB")
     leadership = service.generate_report(STRUCTURED_INPUT, "llama3.2:3b", "Leadership Update")
 
-    assert client.calls == 0
+    assert client.calls == 2
     assert standard.entries[0].yesterday != leadership.entries[0].yesterday
 
 

@@ -10,6 +10,7 @@ class ReportWorker(QThread):
     succeeded = Signal(object)
     failed = Signal(str)
     progress = Signal(str)
+    streamed = Signal(str)
 
     def __init__(self, generator: YTBGeneratorService, raw_input: str, model_name: str, preset_name: str) -> None:
         super().__init__()
@@ -25,6 +26,7 @@ class ReportWorker(QThread):
                 model_name=self.model_name,
                 preset_name=self.preset_name,
                 progress_callback=self.progress.emit,
+                stream_callback=self.streamed.emit,
             )
             self.succeeded.emit(report)
         except Exception as exc:
