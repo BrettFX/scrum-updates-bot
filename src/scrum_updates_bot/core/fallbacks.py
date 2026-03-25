@@ -61,8 +61,17 @@ def _apply_preset(yesterday: str, today: str, blockers: str, story_title: str, p
 
 _FUTURE_MARKERS = re.compile(
     r"\b(going to|will be|will |plan to|planning to|intend to|want to|"
-    r"today i|focus for today|continue with|next step|working on next|"
+    r"today i|this morning|focus for today|continue with|next step|working on next|"
     r"scheduled to|aiming to|hoping to)\b",
+    re.IGNORECASE,
+)
+
+_BLOCKER_MARKERS = re.compile(
+    r"\b(blocked by|waiting for|waiting on|need to find out|needs to be assigned|"
+    r"unclear who|no owner|haven't heard|no response from|"
+    r"pending (?:approval|review|response|sign.off)|"
+    r"need to (?:identify|determine|figure out|find out)|"
+    r"have not heard|not yet assigned|responsible (?:party|person) (?:is |has )?not)\b",
     re.IGNORECASE,
 )
 
@@ -124,10 +133,13 @@ def fallback_normalize(raw_input: str) -> NormalizedStoryCollection:
             today = "None (Complete)"
         elif cleaned_body:
             sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", cleaned_body) if s.strip()]
-            past_sentences = [s for s in sentences if not _FUTURE_MARKERS.search(s)]
+            past_sentences = [s for s in sentences if not _FUTURE_MARKERS.search(s) and not _BLOCKER_MARKERS.search(s)]
             planned_sentences = [s for s in sentences if _FUTURE_MARKERS.search(s)]
+            blocker_sentences = [s for s in sentences if _BLOCKER_MARKERS.search(s)]
             yesterday = _compress_to_one_sentence(past_sentences) if past_sentences else _compress_to_one_sentence(sentences[:1])
             today = _compress_to_one_sentence(planned_sentences) if planned_sentences else f"Will continue advancing {title}."
+            if blocker_sentences:
+                blockers = _compress_to_one_sentence(blocker_sentences)
         else:
             yesterday = f"Made progress on {title}."
             today = f"Will continue advancing {title}."
