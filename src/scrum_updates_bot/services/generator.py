@@ -43,6 +43,7 @@ class YTBGeneratorService:
             )
             expected = len(normalized.stories)
             if llm_report is not None and len(llm_report.entries) >= expected:
+                self._patch_ticket_metadata(llm_report, normalized)
                 self._report_cache[cache_key] = llm_report
                 return llm_report.model_copy(deep=True)
             # LLM returned fewer entries than stories — use deterministic fallback
@@ -82,6 +83,19 @@ class YTBGeneratorService:
             report = fallback_generate(normalized, preset_name)
             self._report_cache[cache_key] = report
             return report.model_copy(deep=True)
+
+    def _patch_ticket_metadata(self, report: YTBReport, normalized: NormalizedStoryCollection) -> YTBReport:
+        """Fill missing ticket fields from normalized source and enforce completion status by position."""
+        for entry, story in zip(report.entries, normalized.stories):
+            if not entry.ticket_id and story.story.ticket_id:
+                entry.ticket_id = story.story.ticket_id
+            if not entry.ticket_url and story.story.ticket_url:
+                entry.ticket_url = story.story.ticket_url
+            if story.story.status == "done":
+                entry.yesterday = "None (Complete)"
+                entry.today = "None (Complete)"
+                entry.completed = True
+        return report
 
     def _generate_direct(self, raw_input: str, model_name: str, preset_name: str, progress_callback=None, stream_callback=None) -> YTBReport | None:
         try:

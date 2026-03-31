@@ -68,10 +68,13 @@ def build_generation_system_prompt(preset_name: str) -> str:
         "Synthesize multiple actions into one cohesive sentence per field — do not list every step or copy source text verbatim. "
         "Use professional third-person voice with no personal pronouns or names. "
         "Yesterday must be past tense describing what was accomplished before today. "
-        "Today must be future tense describing what is planned for today (e.g., 'Will continue...', 'Will focus on...'). "
+        "Today must be future tense describing the specific planned work (e.g., 'Will finalize the API changes', 'Will begin integration testing'). "
+        "Never write Today as 'Will continue advancing [story title]' — describe the actual work, not the ticket name. "
         "Events described as happening 'this morning' or 'today' belong in Today, not Yesterday. "
         "When notes mention uncertainty, missing owners, waiting on others, or needing to identify responsible parties, "
         "surface those as a specific Blockers sentence rather than leaving Blockers as None. "
+        "CRITICAL: if the notes say 'Done', 'Complete', or the story status is done, set completed=true and use "
+        "exactly the string 'None (Complete)' for both yesterday and today. Do NOT invent content for completed stories. "
         f"{guidance} "
         "Return only valid JSON matching the requested schema."
     )
@@ -85,11 +88,13 @@ def build_direct_generation_system_prompt(preset_name: str) -> str:
         "Synthesize multiple actions into one cohesive sentence per field — do not list every step or copy input text verbatim. "
         "Use professional third-person voice with no personal pronouns or names. "
         "Yesterday must be past tense describing what was accomplished before today. "
-        "Today must be future tense describing what is planned for today (e.g., 'Will continue...', 'Will focus on...'). "
+        "Today must be future tense describing the specific planned work (e.g., 'Will finalize the API changes', 'Will begin integration testing'). "
+        "Never write Today as 'Will continue advancing [story title]' — describe the actual work, not the ticket name. "
         "Events described as happening 'this morning' or 'today' belong in Today, not Yesterday. "
         "When notes mention uncertainty, missing owners, waiting on others, or needing to identify responsible parties, "
         "surface those as a specific Blockers sentence rather than leaving Blockers as None. "
-        "If a story is complete, use None (Complete) for Yesterday and Today. "
+        "CRITICAL: if the notes say 'Done', 'Complete', or similar, set completed=true and use "
+        "exactly the string 'None (Complete)' for both yesterday and today. Do NOT invent content for completed stories. "
         f"{guidance} "
         "Return only valid JSON matching the requested schema."
     )
@@ -105,6 +110,7 @@ Example 1 (work-in-progress, future integration mentioned):
   → yesterday: "Explored the ReAct backend approach, implementing session-scoped script generation in a temp directory."
   → today:     "Will continue frontend integration work and resolve remaining configuration format issues."
   → blockers:  "None"
+  → completed: false
 
 Example 2 (no progress yesterday, this-morning event, missing owner):
   source: "No additional motion on this yesterday. This morning a stakeholder requested a call to
@@ -113,6 +119,7 @@ Example 2 (no progress yesterday, this-morning event, missing owner):
   → yesterday: "No progress made."
   → today:     "Will coordinate with the stakeholder on the setup call and clarify ticket ownership."
   → blockers:  "Responsible party for next steps has not yet been identified."
+  → completed: false
 
 Example 3 (bug fix, waiting on review):
   source: "Fixed the login timeout bug and deployed the fix to staging. Waiting for QA sign-off
@@ -120,6 +127,16 @@ Example 3 (bug fix, waiting on review):
   → yesterday: "Resolved the login timeout bug and deployed the fix to the staging environment."
   → today:     "Will monitor staging and coordinate production release once QA approves."
   → blockers:  "Pending QA sign-off before production deployment."
+  → completed: false
+
+Example 4 (story is complete — note says 'Done' or 'Complete'):
+  source: "Done."
+  → yesterday: "None (Complete)"
+  → today:     "None (Complete)"
+  → blockers:  "None"
+  → completed: true
+  IMPORTANT: when a story is done/complete, BOTH yesterday AND today must be exactly the string
+  "None (Complete)" and completed must be true. Do NOT invent or infer extra details.
 """
 
 
@@ -166,8 +183,10 @@ def build_direct_generation_user_prompt(raw_input: str) -> str:
     }
     return (
         "Turn the following scrum notes into a polished YTB report. "
-        "For each story write one concise sentence for Yesterday and one for Today, "
+        "For each story write one concise past-tense sentence for Yesterday and one future-tense sentence for Today, "
         "synthesizing the key outcome in your own words — do not copy the notes verbatim. "
-        "Handle both clean structured and messy freeform input.\n\n"        f"{_FEW_SHOT_EXAMPLES}\n"        f"Target schema:\n{json.dumps(schema, indent=2)}\n\n"
+        "Handle both clean structured and messy freeform input.\n\n"
+        f"{_FEW_SHOT_EXAMPLES}\n"
+        f"Target schema:\n{json.dumps(schema, indent=2)}\n\n"
         f"Raw input:\n{raw_input.strip()}"
     )

@@ -184,7 +184,7 @@ def fallback_generate(normalized: NormalizedStoryCollection, preset_name: str) -
     for item in normalized.stories:
         completed = item.story.status == "done"
         yesterday = item.yesterday_notes or ("None (Complete)" if completed else "Worked on the story yesterday.")
-        today = item.today_notes or ("None (Complete)" if completed else "Will continue the planned work for this story today.")
+        today = item.today_notes or ("None (Complete)" if completed else "Will continue the planned work.")
         blockers = item.blockers or "None"
         yesterday, today, blockers = _apply_preset(yesterday, today, blockers, item.story.title, preset_name)
         entries.append(
