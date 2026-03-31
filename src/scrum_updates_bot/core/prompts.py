@@ -101,24 +101,25 @@ def build_direct_generation_system_prompt(preset_name: str) -> str:
 
 
 _FEW_SHOT_EXAMPLES = """
-EXAMPLES — follow this quality and style exactly:
+EXAMPLES — these show the required OUTPUT FORMAT and style only.
+WARNING: Do NOT copy or reuse any content from these examples in your output.
+Base your output SOLELY on the input provided at the end of this prompt.
 
-Example 1 (work-in-progress, future integration mentioned):
-  source: "Continued exploring this solution and made good progress. The new backend uses the ReAct
-           approach and creates its own scripts in a temp directory per session. Will continue
-           integrations today with the frontend as there are a few minor things to address."
-  → yesterday: "Explored the ReAct backend approach, implementing session-scoped script generation in a temp directory."
-  → today:     "Will continue frontend integration work and resolve remaining configuration format issues."
+Example 1 (data pipeline, multi-step progress):
+  source: "Spent the day tuning the ETL job for the customer churn dataset. Had to rewrite the
+           deduplication step because it was producing duplicate rows downstream. Pipeline now
+           runs end-to-end cleanly in staging. Will focus on scheduling and monitoring alerts today."
+  → yesterday: "Refactored the ETL deduplication logic and validated the customer churn pipeline end-to-end in staging."
+  → today:     "Will configure the pipeline schedule and set up monitoring alerts for production readiness."
   → blockers:  "None"
   → completed: false
 
 Example 2 (no progress yesterday, this-morning event, missing owner):
-  source: "No additional motion on this yesterday. This morning a stakeholder requested a call to
-           start standing up the environment. Whoever is responsible for next steps needs to be
-           assigned the ticket. Need to find out who that is."
+  source: "No movement on this yesterday. Heard this morning that the security team needs to review
+           the new IAM role changes before we can proceed. Still not sure who owns final approval."
   → yesterday: "No progress made."
-  → today:     "Will coordinate with the stakeholder on the setup call and clarify ticket ownership."
-  → blockers:  "Responsible party for next steps has not yet been identified."
+  → today:     "Will follow up with the security team on the IAM role review and clarify approval ownership."
+  → blockers:  "Final approver for IAM role changes has not yet been identified."
   → completed: false
 
 Example 3 (bug fix, waiting on review):
@@ -160,6 +161,8 @@ def build_generation_user_prompt(normalized: NormalizedStoryCollection) -> str:
         f"You MUST produce exactly {story_count} entries in the output — one entry per story, in the same order. "
         "For each entry write one concise past-tense sentence for Yesterday and one future-tense sentence for Today. "
         "Synthesize the key outcome in your own words — do not echo or closely paraphrase the source_summary. "
+        "IMPORTANT: Base your output ONLY on the normalized stories below. "
+        "Do NOT reuse or borrow any content from the examples above. "
         "Preserve ticket metadata and mark completed stories as None (Complete) where appropriate.\n\n"
         f"{_FEW_SHOT_EXAMPLES}\n"
         f"Target schema:\n{json.dumps(schema, indent=2)}\n\n"
@@ -185,6 +188,8 @@ def build_direct_generation_user_prompt(raw_input: str) -> str:
         "Turn the following scrum notes into a polished YTB report. "
         "For each story write one concise past-tense sentence for Yesterday and one future-tense sentence for Today, "
         "synthesizing the key outcome in your own words — do not copy the notes verbatim. "
+        "IMPORTANT: Base your output ONLY on the raw input below. "
+        "Do NOT reuse or borrow any content from the examples above. "
         "Handle both clean structured and messy freeform input.\n\n"
         f"{_FEW_SHOT_EXAMPLES}\n"
         f"Target schema:\n{json.dumps(schema, indent=2)}\n\n"
