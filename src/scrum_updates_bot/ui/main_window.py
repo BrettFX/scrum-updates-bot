@@ -40,6 +40,7 @@ from scrum_updates_bot.services.ollama_setup import is_ollama_cli_installed, oll
 from scrum_updates_bot.storage.drafts import DraftStore
 from scrum_updates_bot.storage.prompt_templates import PromptTemplateStore
 from scrum_updates_bot.storage.settings import SettingsStore
+from scrum_updates_bot.ui.model_manager import ModelManagerDialog
 from scrum_updates_bot.ui.workers import ReportWorker
 
 
@@ -83,6 +84,10 @@ class MainWindow(QMainWindow):
         refresh_action.triggered.connect(self.refresh_models)
         toolbar.addAction(refresh_action)
 
+        manage_models_action = QAction("Manage Models", self)
+        manage_models_action.triggered.connect(self.open_model_manager)
+        toolbar.addAction(manage_models_action)
+
         save_action = QAction("Save Draft", self)
         save_action.triggered.connect(self.save_draft)
         toolbar.addAction(save_action)
@@ -122,17 +127,10 @@ class MainWindow(QMainWindow):
         controls.addWidget(QLabel("Model"))
 
         self.model_combo = QComboBox()
-        self.model_combo.setEditable(True)
+        self.model_combo.setEditable(False)
         self.model_combo.setMinimumWidth(220)
         controls.addWidget(self.model_combo)
 
-        self.pull_model_input = QLineEdit()
-        self.pull_model_input.setPlaceholderText("Model to pull, for example llama3.2:3b")
-        controls.addWidget(self.pull_model_input)
-
-        pull_button = QPushButton("Pull Model")
-        pull_button.clicked.connect(self.pull_model)
-        controls.addWidget(pull_button)
 
         controls.addWidget(QLabel("Preset"))
         self.preset_button = QToolButton()
@@ -624,19 +622,10 @@ class MainWindow(QMainWindow):
             if not silent:
                 self.append_activity(str(exc))
 
-    def pull_model(self) -> None:
-        model_name = self.pull_model_input.text().strip() or self.model_combo.currentText().strip()
-        if not model_name:
-            QMessageBox.warning(self, "Model required", "Enter a model name to pull from Ollama.")
-            return
-        try:
-            self.append_activity(f"Pulling model {model_name}...")
-            self.ollama_client.pull_model(model_name)
-            self.refresh_models(silent=True)
-            self.model_combo.setCurrentText(model_name)
-            self.append_activity(f"Model pull completed for {model_name}.")
-        except OllamaError as exc:
-            QMessageBox.critical(self, "Model pull failed", str(exc))
+    def open_model_manager(self) -> None:
+        dlg = ModelManagerDialog(self.ollama_client, parent=self)
+        dlg.finished.connect(lambda _: self.refresh_models(silent=True))
+        dlg.exec()
 
     def generate_report(self) -> None:
         raw_input = self.raw_input.toPlainText().strip()

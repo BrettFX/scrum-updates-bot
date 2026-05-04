@@ -63,7 +63,7 @@ class PromptTemplateDocument(BaseModel):
 
 class AppSettings(BaseModel):
     ollama_base_url: str = "http://127.0.0.1:11434"
-    model_name: str = "llama3.2:3b"
+    model_name: str = "qwen2.5:7b-instruct"
     selected_preset: str = "Standard YTB"
     last_draft_name: str | None = None
     window_width: int = 1440

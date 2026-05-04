@@ -4,6 +4,33 @@ from PySide6.QtCore import QThread, Signal
 
 from scrum_updates_bot.core.models import YTBReport
 from scrum_updates_bot.services.generator import YTBGeneratorService
+from scrum_updates_bot.services.ollama import OllamaClient, OllamaError
+
+
+class ModelPullWorker(QThread):
+    """Background thread that streams an Ollama model pull with progress signals."""
+
+    progress = Signal(str, int, int)  # status_msg, bytes_completed, bytes_total
+    succeeded = Signal()
+    failed = Signal(str)
+
+    def __init__(self, client: OllamaClient, model_name: str) -> None:
+        super().__init__()
+        self.client = client
+        self.model_name = model_name
+
+    def run(self) -> None:
+        try:
+            for status, completed, total in self.client.pull_model_stream(self.model_name):
+                if self.isInterruptionRequested():
+                    self.failed.emit("Cancelled.")
+                    return
+                self.progress.emit(status, completed, total)
+            self.succeeded.emit()
+        except OllamaError as exc:
+            self.failed.emit(str(exc))
+        except Exception as exc:
+            self.failed.emit(str(exc))
 
 
 class ReportWorker(QThread):

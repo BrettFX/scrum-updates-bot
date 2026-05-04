@@ -44,6 +44,48 @@ class OllamaClient:
         except (httpx.HTTPError, ValueError) as exc:
             raise OllamaError(f"Failed to pull model '{model_name}': {exc}") from exc
 
+    def pull_model_stream(self, model_name: str):
+        """Stream pull progress.  Yields ``(status, completed, total)`` tuples where
+        *completed* and *total* are byte counts (0 when not applicable)."""
+        timeout = httpx.Timeout(connect=30.0, read=60.0, write=None, pool=None)
+        try:
+            with httpx.stream(
+                "POST",
+                f"{self.base_url}/api/pull",
+                json={"name": model_name, "stream": True},
+                timeout=timeout,
+            ) as response:
+                response.raise_for_status()
+                for line in response.iter_lines():
+                    if not line:
+                        continue
+                    data = json.loads(line)
+                    yield data.get("status", ""), data.get("completed", 0), data.get("total", 0)
+        except (httpx.HTTPError, ValueError, json.JSONDecodeError) as exc:
+            raise OllamaError(f"Failed to pull model '{model_name}': {exc}") from exc
+
+    def delete_model(self, model_name: str) -> None:
+        """Delete a locally installed model."""
+        try:
+            response = httpx.delete(
+                f"{self.base_url}/api/delete",
+                json={"name": model_name},
+                timeout=30.0,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise OllamaError(f"Failed to delete model '{model_name}': {exc}") from exc
+
+    def list_models_detail(self) -> list[dict[str, Any]]:
+        """Return full model metadata dicts (name, size, modified_at, details) from /api/tags."""
+        try:
+            response = httpx.get(f"{self.base_url}/api/tags", timeout=10.0)
+            response.raise_for_status()
+            data = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            raise OllamaError(f"Failed to list Ollama models: {exc}") from exc
+        return data.get("models", [])
+
     def generate_json(self, model_name: str, system_prompt: str, user_prompt: str) -> dict[str, Any]:
         payload = {
             "model": model_name,
