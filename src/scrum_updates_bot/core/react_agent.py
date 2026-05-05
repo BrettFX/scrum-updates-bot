@@ -20,7 +20,6 @@ last produced rather than raising.
 
 import json
 import logging
-import re
 from pydantic import ValidationError
 
 from scrum_updates_bot.core.models import CritiqueResult, FieldCorrection, YTBEntry, YTBReport
@@ -37,20 +36,6 @@ from scrum_updates_bot.services.ollama import OllamaClient, OllamaError
 logger = logging.getLogger(__name__)
 
 _DEFAULT_MAX_ITERATIONS = 3
-
-# Matches any language indicating future / remaining / in-progress work.
-# Used as a deterministic backstop to prevent incorrect completed=True.
-_FUTURE_WORK_RE = re.compile(
-    r"\b("
-    r"will |going to|plan to|planning to|intend to|want to|"
-    r"i will|we will|continue to|will continue|"
-    r"still work|still need|remaining|not yet|incomplete|"
-    r"today i|this morning|focus for today|"
-    r"next step|working on next|scheduled to|aiming to|hoping to|"
-    r"in progress|yet to|haven.t|have not"
-    r")\b",
-    re.IGNORECASE,
-)
 
 
 class ReActYTBAgent:
@@ -109,17 +94,6 @@ class ReActYTBAgent:
                 # Generation completely failed — nothing to critique
                 break
 
-            # ── SANITY CHECK (deterministic) ────────────────────────────
-            # Revert any entries incorrectly marked complete when the source
-            # text contains future-work language. This is a reliable backstop
-            # that runs before and independent of the LLM critique step.
-            reverted = self._enforce_completion_sanity(report, raw_input)
-            if reverted:
-                self._emit(
-                    progress_callback,
-                    f"Corrected {reverted} entry/entries incorrectly marked as complete.",
-                )
-
             # On the last iteration skip critique — just return what we have
             if is_last:
                 self._emit(progress_callback, f"Completed after {iteration} iteration(s).")
@@ -152,33 +126,6 @@ class ReActYTBAgent:
             )
 
         return report or YTBReport(entries=[], preset_name=preset_name)
-
-    # ------------------------------------------------------------------
-    # Private: completion sanity check (deterministic)
-    # ------------------------------------------------------------------
-
-    def _enforce_completion_sanity(self, report: YTBReport, source_text: str) -> int:
-        """Revert completed=True on any entry where *source_text* contains
-        future-work language, indicating the story is still in progress.
-
-        Returns the number of entries reverted.
-        """
-        if not _FUTURE_WORK_RE.search(source_text):
-            return 0
-        reverted = 0
-        for entry in report.entries:
-            if entry.completed:
-                entry.completed = False
-                if entry.yesterday == "None (Complete)":
-                    entry.yesterday = "Work was in progress."
-                if entry.today == "None (Complete)":
-                    entry.today = "Will continue remaining work."
-                logger.debug(
-                    "Reverted incorrect completion status for '%s' — source notes contain future-work language.",
-                    entry.story_title,
-                )
-                reverted += 1
-        return reverted
 
     # ------------------------------------------------------------------
     # Private: generation
