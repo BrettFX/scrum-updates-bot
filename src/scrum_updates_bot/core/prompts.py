@@ -73,9 +73,10 @@ def build_generation_system_prompt(preset_name: str) -> str:
         "Events described as happening 'this morning' or 'today' belong in Today, not Yesterday. "
         "When notes mention uncertainty, missing owners, waiting on others, or needing to identify responsible parties, "
         "surface those as a specific Blockers sentence rather than leaving Blockers as None. "
-        "Mark completed=true only when the notes explicitly confirm all work on this story is finished and no further action is planned. "
+        "Mark completed=true ONLY when the notes confirm the ENTIRE story is finished with no remaining tasks. "
+        "Saying 'completed X tasks' or 'completed part of the work' does NOT make the story complete — look for explicit confirmation that all work is done. "
+        "If the notes contain any future-tense plans ('will continue', 'I will', 'still working', 'remaining', 'today I plan'), the story is in-progress — set completed=false. "
         "If a story is complete, use 'None (Complete)' for yesterday and today rather than inventing content. "
-        "Use your judgment — do not over-apply completion status to stories that still have active work. "
         f"{guidance} "
         "Return only valid JSON matching the requested schema."
     )
@@ -94,9 +95,10 @@ def build_direct_generation_system_prompt(preset_name: str) -> str:
         "Events described as happening 'this morning' or 'today' belong in Today, not Yesterday. "
         "When notes mention uncertainty, missing owners, waiting on others, or needing to identify responsible parties, "
         "surface those as a specific Blockers sentence rather than leaving Blockers as None. "
-        "Mark completed=true only when the notes explicitly confirm all work on this story is finished and no further action is planned. "
+        "Mark completed=true ONLY when the notes confirm the ENTIRE story is finished with no remaining tasks. "
+        "Saying 'completed X tasks' or 'completed part of the work' does NOT make the story complete — look for explicit confirmation that all work is done. "
+        "If the notes contain any future-tense plans ('will continue', 'I will', 'still working', 'remaining', 'today I plan'), the story is in-progress — set completed=false. "
         "If a story is complete, use 'None (Complete)' for yesterday and today rather than inventing content. "
-        "Use your judgment — do not over-apply completion status to stories that still have active work. "
         f"{guidance} "
         "Return only valid JSON matching the requested schema."
     )
@@ -132,14 +134,21 @@ Example 3 (bug fix, waiting on review):
   → blockers:  "Pending QA sign-off before production deployment."
   → completed: false
 
-Example 4 (story is complete — note says 'Done' or 'Complete'):
-  source: "Done."
+Example 4 (story is complete — ONLY when ALL work is finished, nothing remaining):
+  source: "Done." OR "Story complete." OR "Finished and deployed — nothing left to do."
   → yesterday: "None (Complete)"
   → today:     "None (Complete)"
   → blockers:  "None"
   → completed: true
-  IMPORTANT: when a story is done/complete, BOTH yesterday AND today must be exactly the string
-  "None (Complete)" and completed must be true. Do NOT invent or infer extra details.
+
+Counter-example 4b (in-progress despite mentioning completed tasks):
+  source: "Completed tasks 1 and 2. Still need to finish task 3. Will continue today."
+  → yesterday: "Completed the first two tasks in the sequence."
+  → today:     "Will complete the remaining task."
+  → blockers:  "None"
+  → completed: false
+  RULE: 'completed=true' means the ENTIRE story is done. Partial completion ('completed X of Y')
+  or any mention of future work ('will continue', 'remaining', 'today I will') means completed=false.
 """
 
 
