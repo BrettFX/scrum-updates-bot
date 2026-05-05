@@ -458,8 +458,13 @@ class ModelManagerDialog(QDialog):
     def _on_pull_progress(self, status: str, completed: int, total: int) -> None:
         self.pull_status_label.setText(status or "Working…")
         if total > 0:
-            self.progress_bar.setRange(0, total)
-            self.progress_bar.setValue(completed)
+            # Scale to MB to stay within Qt's 32-bit int range for QProgressBar.
+            # Raw byte counts for large models (e.g. 4.7 GB) overflow QProgressBar's
+            # maximum value of ~2.1 billion.
+            total_mb = max(1, total // (1024 * 1024))
+            completed_mb = min(completed // (1024 * 1024), total_mb)
+            self.progress_bar.setRange(0, total_mb)
+            self.progress_bar.setValue(completed_mb)
             self.progress_bytes_label.setText(f"{_fmt_bytes(completed)} / {_fmt_bytes(total)}")
         else:
             self.progress_bar.setRange(0, 0)
