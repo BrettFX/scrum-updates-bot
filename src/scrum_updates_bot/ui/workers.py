@@ -10,7 +10,7 @@ from scrum_updates_bot.services.ollama import OllamaClient, OllamaError
 class ModelPullWorker(QThread):
     """Background thread that streams an Ollama model pull with progress signals."""
 
-    progress = Signal(str, int, int)  # status_msg, bytes_completed, bytes_total
+    progress = Signal(str, object, object)  # status_msg, bytes_completed, bytes_total
     succeeded = Signal()
     failed = Signal(str)
 
