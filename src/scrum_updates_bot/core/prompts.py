@@ -73,8 +73,9 @@ def build_generation_system_prompt(preset_name: str) -> str:
         "Events described as happening 'this morning' or 'today' belong in Today, not Yesterday. "
         "When notes mention uncertainty, missing owners, waiting on others, or needing to identify responsible parties, "
         "surface those as a specific Blockers sentence rather than leaving Blockers as None. "
-        "CRITICAL: if the notes say 'Done', 'Complete', or the story status is done, set completed=true and use "
-        "exactly the string 'None (Complete)' for both yesterday and today. Do NOT invent content for completed stories. "
+        "Mark completed=true only when the notes explicitly confirm all work on this story is finished and no further action is planned. "
+        "If a story is complete, use 'None (Complete)' for yesterday and today rather than inventing content. "
+        "Use your judgment — do not over-apply completion status to stories that still have active work. "
         f"{guidance} "
         "Return only valid JSON matching the requested schema."
     )
@@ -93,8 +94,9 @@ def build_direct_generation_system_prompt(preset_name: str) -> str:
         "Events described as happening 'this morning' or 'today' belong in Today, not Yesterday. "
         "When notes mention uncertainty, missing owners, waiting on others, or needing to identify responsible parties, "
         "surface those as a specific Blockers sentence rather than leaving Blockers as None. "
-        "CRITICAL: if the notes say 'Done', 'Complete', or similar, set completed=true and use "
-        "exactly the string 'None (Complete)' for both yesterday and today. Do NOT invent content for completed stories. "
+        "Mark completed=true only when the notes explicitly confirm all work on this story is finished and no further action is planned. "
+        "If a story is complete, use 'None (Complete)' for yesterday and today rather than inventing content. "
+        "Use your judgment — do not over-apply completion status to stories that still have active work. "
         f"{guidance} "
         "Return only valid JSON matching the requested schema."
     )
@@ -194,4 +196,97 @@ def build_direct_generation_user_prompt(raw_input: str) -> str:
         f"{_FEW_SHOT_EXAMPLES}\n"
         f"Target schema:\n{json.dumps(schema, indent=2)}\n\n"
         f"Raw input:\n{raw_input.strip()}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# ReAct critique and revision prompts
+# ---------------------------------------------------------------------------
+
+_CRITIQUE_SCHEMA = {
+    "acceptable": False,
+    "issues": [
+        "Entry 0: yesterday field is too generic — does not reflect the specific work described in the notes.",
+        "Entry 1: incorrectly marked as complete — notes indicate the work is still ongoing.",
+    ],
+    "corrections": [
+        {
+            "entry_index": 0,
+            "field": "yesterday",
+            "corrected_value": "Resolved the authentication token refresh bug and validated the fix in staging.",
+            "reason": "Original was a vague restatement of the story title rather than the actual work.",
+        },
+        {
+            "entry_index": 1,
+            "field": "completed",
+            "corrected_value": False,
+            "reason": "Notes say 'still working on it' — the story is in-progress, not done.",
+        },
+    ],
+}
+
+
+def build_critique_system_prompt() -> str:
+    return (
+        "You are a quality reviewer for scrum status updates. "
+        "You will receive the original raw scrum notes and a draft Yesterday/Today/Blockers report. "
+        "Your job is to reason carefully about whether the draft accurately and faithfully represents the source notes. "
+        "\n\nEvaluate each entry for:\n"
+        "- ACCURACY: does yesterday/today/blockers faithfully match what the notes actually say? Flag any fabrication or omission.\n"
+        "- COMPLETION STATUS: is completed=true correct? Only mark complete when the notes explicitly confirm all work is done "
+        "with no future actions planned. Flag any story marked complete that still has active planned work.\n"
+        "- TENSE: yesterday must be past tense (actions already taken); today must be future tense (planned actions).\n"
+        "- SPECIFICITY: today must describe the actual planned work, not a vague continuation of the story title.\n"
+        "- BLOCKERS: if the notes mention waiting on others, unclear ownership, pending approvals, or anything blocking "
+        "progress, that must appear in the blockers field — not be silently dropped.\n"
+        "- COMPLETENESS: is any significant detail from the source notes missing from the draft?\n"
+        "\nSet acceptable=true only if the draft is accurate, complete, and well-phrased with no issues. "
+        "If issues exist, list each one and provide targeted field-level corrections where possible. "
+        "Return only valid JSON matching the requested schema."
+    )
+
+
+def build_critique_user_prompt(raw_input: str, report_json: str) -> str:
+    return (
+        "Review the draft YTB report below against the original source notes and identify any issues.\n\n"
+        f"ORIGINAL SOURCE NOTES:\n{raw_input.strip()}\n\n"
+        f"DRAFT YTB REPORT (JSON):\n{report_json}\n\n"
+        f"Return your critique as JSON matching this schema:\n{json.dumps(_CRITIQUE_SCHEMA, indent=2)}"
+    )
+
+
+def build_revision_system_prompt(preset_name: str) -> str:
+    guidance = PRESET_GUIDANCE.get(preset_name, PRESET_GUIDANCE["Standard YTB"])
+    return (
+        "You are revising a scrum status update based on a quality review. "
+        "You will receive the original notes, the previous draft, and a list of specific issues found. "
+        "Produce a corrected YTB report that fixes all identified issues while preserving anything that was already correct. "
+        "Do not introduce new fabrications — base every field on the source notes. "
+        f"{guidance} "
+        "Return only valid JSON matching the YTBReport schema with an 'entries' array."
+    )
+
+
+def build_revision_user_prompt(raw_input: str, report_json: str, issues: list[str]) -> str:
+    issues_text = "\n".join(f"- {issue}" for issue in issues)
+    schema = {
+        "entries": [
+            {
+                "story_title": "Story title",
+                "ticket_id": "ABC-1234 or null",
+                "ticket_url": "URL or null",
+                "yesterday": "Past tense — what was done.",
+                "today": "Future tense — what will be done.",
+                "blockers": "None or specific blocker description.",
+                "completed": False,
+            }
+        ]
+    }
+    return (
+        f"ORIGINAL SOURCE NOTES:\n{raw_input.strip()}\n\n"
+        f"PREVIOUS DRAFT (JSON):\n{report_json}\n\n"
+        f"ISSUES TO FIX:\n{issues_text}\n\n"
+        "Produce a corrected YTB report that fixes all issues above. "
+        "Keep any entries that were already correct. "
+        f"Return JSON matching this schema:\n{json.dumps(schema, indent=2)}"
     )

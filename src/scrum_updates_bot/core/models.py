@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -39,6 +39,23 @@ class YTBReport(BaseModel):
     entries: list[YTBEntry] = Field(default_factory=list)
     preset_name: str = "Standard YTB"
     generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class FieldCorrection(BaseModel):
+    """A targeted correction produced by the critique step."""
+
+    entry_index: int
+    field: Literal["yesterday", "today", "blockers", "completed"]
+    corrected_value: Any  # str for text fields, bool for completed
+    reason: str = ""
+
+
+class CritiqueResult(BaseModel):
+    """Structured output from the ReAct critique step."""
+
+    acceptable: bool = False
+    issues: list[str] = Field(default_factory=list)
+    corrections: list[FieldCorrection] = Field(default_factory=list)
 
 
 class DraftDocument(BaseModel):

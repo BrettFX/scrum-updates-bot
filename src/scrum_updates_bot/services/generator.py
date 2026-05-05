@@ -5,150 +5,92 @@ from pydantic import ValidationError
 from scrum_updates_bot.core.fallbacks import fallback_generate, fallback_normalize, has_structured_story_blocks
 from scrum_updates_bot.core.models import NormalizedStoryCollection, YTBReport
 from scrum_updates_bot.core.prompts import (
-    build_direct_generation_system_prompt,
-    build_direct_generation_user_prompt,
-    build_generation_system_prompt,
-    build_generation_user_prompt,
     build_normalization_system_prompt,
     build_normalization_user_prompt,
 )
+from scrum_updates_bot.core.react_agent import ReActYTBAgent
 from scrum_updates_bot.services.ollama import OllamaClient, OllamaError
 
 
 class YTBGeneratorService:
-    def __init__(self, ollama_client: OllamaClient) -> None:
+    """Entry point for YTB report generation.
+
+    Delegates to :class:`~scrum_updates_bot.core.react_agent.ReActYTBAgent`
+    for all LLM-based generation.  The service layer adds:
+    - result caching (keyed on raw_input + model + preset)
+    - structured-notes pre-normalisation path
+    - deterministic fallback when Ollama is unreachable or the agent returns nothing
+    """
+
+    def __init__(self, ollama_client: OllamaClient, max_react_iterations: int = 3) -> None:
         self.ollama_client = ollama_client
+        self._agent = ReActYTBAgent(ollama_client, max_iterations=max_react_iterations)
         self._report_cache: dict[tuple[str, str, str], YTBReport] = {}
 
-    def generate_report(self, raw_input: str, model_name: str, preset_name: str, progress_callback=None, stream_callback=None) -> YTBReport:
+    def generate_report(
+        self,
+        raw_input: str,
+        model_name: str,
+        preset_name: str,
+        progress_callback=None,
+        stream_callback=None,
+    ) -> YTBReport:
         cache_key = (raw_input.strip(), model_name, preset_name)
-        cached_report = self._report_cache.get(cache_key)
-        if cached_report is not None:
+        cached = self._report_cache.get(cache_key)
+        if cached is not None:
             if progress_callback:
                 progress_callback("Using cached result.")
-            return cached_report.model_copy(deep=True)
+            return cached.model_copy(deep=True)
 
+        # ── Structured-block path ────────────────────────────────────────
+        # When the input contains recognisable "Story title is …" blocks,
+        # pre-normalise deterministically so the agent receives clean,
+        # structured text rather than raw freeform input.
         if has_structured_story_blocks(raw_input):
             if progress_callback:
-                progress_callback("Normalizing structured notes...")
+                progress_callback("Detected structured story blocks — normalising notes…")
             normalized = fallback_normalize(raw_input)
-            if progress_callback:
-                progress_callback(f"Contacting {model_name} for YTB generation...")
-            llm_report = self._generate_from_normalized(
-                normalized=normalized,
+            structured_text = _normalized_to_text(normalized)
+            report = self._agent.run(
+                raw_input=structured_text,
                 model_name=model_name,
                 preset_name=preset_name,
                 progress_callback=progress_callback,
                 stream_callback=stream_callback,
             )
-            expected = len(normalized.stories)
-            if llm_report is not None and len(llm_report.entries) >= expected:
-                self._patch_ticket_metadata(llm_report, normalized)
-                self._report_cache[cache_key] = llm_report
-                return llm_report.model_copy(deep=True)
-            # LLM returned fewer entries than stories — use deterministic fallback
+            if report.entries:
+                _restore_ticket_metadata(report, normalized)
+                self._report_cache[cache_key] = report
+                return report.model_copy(deep=True)
+
+            # Agent produced nothing — fall back to deterministic formatter
             if progress_callback:
-                got = len(llm_report.entries) if llm_report else 0
-                progress_callback(f"LLM returned {got}/{expected} entries — using local formatting.")
+                progress_callback("Agent returned empty report — using local formatting.")
             report = fallback_generate(normalized, preset_name)
             self._report_cache[cache_key] = report
             return report.model_copy(deep=True)
 
-        if progress_callback:
-            progress_callback(f"Contacting {model_name} for direct generation...")
-        direct = self._generate_direct(raw_input=raw_input, model_name=model_name, preset_name=preset_name, progress_callback=progress_callback, stream_callback=stream_callback)
-        if direct is not None and direct.entries:
-            self._report_cache[cache_key] = direct
-            return direct.model_copy(deep=True)
+        # ── Direct / freeform path ───────────────────────────────────────
+        report = self._agent.run(
+            raw_input=raw_input,
+            model_name=model_name,
+            preset_name=preset_name,
+            progress_callback=progress_callback,
+            stream_callback=stream_callback,
+        )
+        if report.entries:
+            self._report_cache[cache_key] = report
+            return report.model_copy(deep=True)
 
+        # Agent produced nothing — normalise then use deterministic fallback
         if progress_callback:
-            progress_callback("Direct generation incomplete. Normalizing notes...")
+            progress_callback("Agent returned empty report — normalising notes as fallback…")
         normalized = self.normalize(raw_input=raw_input, model_name=model_name)
         if not normalized.stories:
             return YTBReport(entries=[], preset_name=preset_name)
-
-        try:
-            if progress_callback:
-                progress_callback("Rendering final YTB report...")
-            payload = self.ollama_client.generate_json(
-                model_name=model_name,
-                system_prompt=build_generation_system_prompt(preset_name),
-                user_prompt=build_generation_user_prompt(normalized),
-            )
-            report = YTBReport(**payload)
-            report.preset_name = preset_name
-            self._report_cache[cache_key] = report
-            return report.model_copy(deep=True)
-        except (OllamaError, ValidationError, ValueError):
-            report = fallback_generate(normalized, preset_name)
-            self._report_cache[cache_key] = report
-            return report.model_copy(deep=True)
-
-    def _patch_ticket_metadata(self, report: YTBReport, normalized: NormalizedStoryCollection) -> YTBReport:
-        """Fill missing ticket fields from normalized source and enforce completion status by position."""
-        for entry, story in zip(report.entries, normalized.stories):
-            if not entry.ticket_id and story.story.ticket_id:
-                entry.ticket_id = story.story.ticket_id
-            if not entry.ticket_url and story.story.ticket_url:
-                entry.ticket_url = story.story.ticket_url
-            if story.story.status == "done":
-                entry.yesterday = "None (Complete)"
-                entry.today = "None (Complete)"
-                entry.completed = True
-        return report
-
-    def _generate_direct(self, raw_input: str, model_name: str, preset_name: str, progress_callback=None, stream_callback=None) -> YTBReport | None:
-        try:
-            streamed_text = ""
-            chunk_count = 0
-            for streamed_text in self.ollama_client.stream_json_text(
-                model_name=model_name,
-                system_prompt=build_direct_generation_system_prompt(preset_name),
-                user_prompt=build_direct_generation_user_prompt(raw_input),
-            ):
-                chunk_count += 1
-                if stream_callback:
-                    stream_callback(streamed_text)
-                if progress_callback and (chunk_count == 1 or chunk_count % 10 == 0):
-                    progress_callback(f"Streaming model response... {len(streamed_text)} characters received.")
-            if not streamed_text:
-                return None
-            payload = self.ollama_client._coerce_json(streamed_text)
-            report = YTBReport(**payload)
-            report.preset_name = preset_name
-            return report
-        except (OllamaError, ValidationError, ValueError):
-            return None
-
-    def _generate_from_normalized(
-        self,
-        normalized: NormalizedStoryCollection,
-        model_name: str,
-        preset_name: str,
-        progress_callback=None,
-        stream_callback=None,
-    ) -> YTBReport | None:
-        try:
-            streamed_text = ""
-            chunk_count = 0
-            for streamed_text in self.ollama_client.stream_json_text(
-                model_name=model_name,
-                system_prompt=build_generation_system_prompt(preset_name),
-                user_prompt=build_generation_user_prompt(normalized),
-            ):
-                chunk_count += 1
-                if stream_callback:
-                    stream_callback(streamed_text)
-                if progress_callback and (chunk_count == 1 or chunk_count % 10 == 0):
-                    progress_callback(f"Streaming model response... {len(streamed_text)} characters received.")
-            if not streamed_text:
-                return None
-            payload = self.ollama_client._coerce_json(streamed_text)
-            report = YTBReport(**payload)
-            report.preset_name = preset_name
-            return report
-        except (OllamaError, ValidationError, ValueError):
-            return None
+        report = fallback_generate(normalized, preset_name)
+        self._report_cache[cache_key] = report
+        return report.model_copy(deep=True)
 
     def normalize(self, raw_input: str, model_name: str) -> NormalizedStoryCollection:
         if not raw_input.strip():
@@ -162,3 +104,39 @@ class YTBGeneratorService:
             return NormalizedStoryCollection(**payload)
         except (OllamaError, ValidationError, ValueError):
             return fallback_normalize(raw_input)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _normalized_to_text(normalized: NormalizedStoryCollection) -> str:
+    """Render a NormalizedStoryCollection back to readable text for the agent."""
+    lines: list[str] = []
+    for ns in normalized.stories:
+        lines.append(f"Story: {ns.story.title}")
+        if ns.story.ticket_id:
+            lines.append(f"Ticket: {ns.story.ticket_id}")
+        if ns.story.status and ns.story.status != "unknown":
+            lines.append(f"Status: {ns.story.status}")
+        if ns.yesterday_notes:
+            lines.append(f"Yesterday: {ns.yesterday_notes}")
+        if ns.today_notes:
+            lines.append(f"Today: {ns.today_notes}")
+        if ns.blockers:
+            lines.append(f"Blockers: {ns.blockers}")
+        lines.append("")
+    return "\n".join(lines).strip()
+
+
+def _restore_ticket_metadata(report: YTBReport, normalized: NormalizedStoryCollection) -> None:
+    """Copy ticket ID / URL from normalised source into entries that are missing them.
+
+    Unlike the old _patch_ticket_metadata, this does NOT override the agent's
+    judgment on yesterday/today/completed — only fills in metadata fields.
+    """
+    for entry, ns in zip(report.entries, normalized.stories):
+        if not entry.ticket_id and ns.story.ticket_id:
+            entry.ticket_id = ns.story.ticket_id
+        if not entry.ticket_url and ns.story.ticket_url:
+            entry.ticket_url = ns.story.ticket_url
