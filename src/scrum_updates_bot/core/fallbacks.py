@@ -121,7 +121,7 @@ def fallback_normalize(raw_input: str) -> NormalizedStoryCollection:
         ticket_match = TICKET_PATTERN.search(title)
         ticket_id = ticket_match.group(1) if ticket_match else None
         lowered = body.lower()
-        status = "done" if re.search(r"\bdone\b|\bcomplete\b", lowered) else "in_progress"
+        status = "done" if re.search(r"(?:^|\s)(?:done|complete)\.?$", lowered) else "in_progress"
         cleaned_body = " ".join(body.split())
 
         yesterday = None
@@ -129,8 +129,8 @@ def fallback_normalize(raw_input: str) -> NormalizedStoryCollection:
         blockers = "None"
 
         if status == "done":
-            yesterday = "None (Complete)"
-            today = "None (Complete)"
+            yesterday = "Completed the story work."
+            today = "No further work planned."
         elif cleaned_body:
             sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", cleaned_body) if s.strip()]
             past_sentences = [s for s in sentences if not _FUTURE_MARKERS.search(s) and not _BLOCKER_MARKERS.search(s)]
@@ -183,8 +183,8 @@ def fallback_generate(normalized: NormalizedStoryCollection, preset_name: str) -
     entries: list[YTBEntry] = []
     for item in normalized.stories:
         completed = item.story.status == "done"
-        yesterday = item.yesterday_notes or ("None (Complete)" if completed else "Worked on the story yesterday.")
-        today = item.today_notes or ("None (Complete)" if completed else "Will continue the planned work.")
+        yesterday = item.yesterday_notes or ("Completed the story work." if completed else "Worked on the story yesterday.")
+        today = item.today_notes or ("No further work planned." if completed else "Will continue the planned work.")
         blockers = item.blockers or "None"
         yesterday, today, blockers = _apply_preset(yesterday, today, blockers, item.story.title, preset_name)
         entries.append(

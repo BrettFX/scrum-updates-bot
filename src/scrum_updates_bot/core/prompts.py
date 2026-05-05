@@ -30,7 +30,8 @@ def build_normalization_system_prompt() -> str:
         "You normalize scrum notes into structured JSON. "
         "Infer stories, ticket IDs, URLs, completion state, yesterday work, today plans, and blockers. "
         "Distill each note to its core outcome — summarize in your own words and do not copy the raw input verbatim. "
-        "If a story is clearly complete, mark status as done and use concise completed-state phrasing. "
+        "Mark status as done ONLY when the notes unambiguously confirm the story is fully finished with nothing left to do. "
+        "If there is any mention of ongoing or future work, mark status as in_progress. "
         "Return only valid JSON matching the requested schema."
     )
 

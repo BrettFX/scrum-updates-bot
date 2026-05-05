@@ -244,10 +244,6 @@ class ReActYTBAgent:
                     applied += 1
                 elif field == "completed" and isinstance(value, bool):
                     entry.completed = value
-                    # Sync yesterday/today when completing inline
-                    if value:
-                        entry.yesterday = "None (Complete)"
-                        entry.today = "None (Complete)"
                     applied += 1
             except Exception as exc:
                 logger.debug("Failed to apply correction %s: %s", correction, exc)
